@@ -1,6 +1,6 @@
 # 0007. One folder listing from both apps, hidden files and folders left out
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-21
 
 ## Context
@@ -44,7 +44,7 @@ The API: `list(folder) -> Result<Listing, Problem>`, a `Listing` being the photo
 ## Assumptions to verify
 
 - [ ] macOS writes `._` files beside photos copied to a memory card formatted in FAT32 or exFAT, which PhotoMatch lists today (unchecked).
-- [ ] The listing gives PhotoMatch the same photos as before in its sample folders, none of which holds a hidden file: step 2.1.
+- [ ] The listing gives PhotoMatch the same photos as before in its sample folders, none of which holds a hidden file: step 2.1. So far, the same counts: `cargo run --example list_folder` on 2026-11-21 listed 10, 15, 15, 2 and 4 photos in `sony-arw`, `other-makers`, `image-files`, `raw-jpeg-pair` and `broken-files`, one RAW+JPEG pair, nothing unopened, as PhotoMatch's own listing shows them; the paths themselves are compared in step 2.1.
 
 ## Sources
 

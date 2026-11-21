@@ -119,6 +119,8 @@ What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`
 
 Every one allows MIT or Apache 2.0 publishing and closed use.
 
+Step 1.3 adds `walkdir` 2.5.0 and `same-file` 1.0.6, both Unlicense or MIT, and on Windows `winapi-util` 0.1.11, Unlicense or MIT, and `windows-sys` 0.61.2, MIT or Apache 2.0: 109 packages from crates.io in all, from `cargo metadata` on 2026-11-21, at PhotoMatch's versions.
+
 ## What moved, and what changed on the way
 
 Plan step 1.2, on 2026-11-21, from PhotoMatch's commit `391fd74`: `photo.rs`, `raw.rs`, `image_file.rs`, `os_image.rs`, `thumbs.rs`, `problem.rs`, and `files.rs` with them, as `thumbs.rs` writes its files through it. Each moved as it was, with its tests, but for these, each marked in the code:
@@ -131,8 +133,10 @@ The thumbnail cache's format, `CACHE_VERSION` included, and `Problem`'s kinds an
 
 ## For the apps
 
-What an app needs, as of step 1.2:
-- **The modules are PhotoMatch's,** under the crate's name: `photo_library::photo`, `::raw`, `::image_file`, `::os_image`, `::thumbs`, `::problem`, `::files`, and `photo_library::rsraw` for LibRaw. Every name in PhotoDev's list of 2026-11-20 is public, which [`tests/public_api.rs`](../tests/public_api.rs) checks.
+What an app needs, as of step 1.3:
+- **The modules are PhotoMatch's,** under the crate's name: `photo_library::photo`, `::raw`, `::image_file`, `::os_image`, `::thumbs`, `::problem`, `::files`, and `photo_library::rsraw` for LibRaw. And `photo_library::folder`, both apps' listing made one ([0007](../spec/decisions/0007-one-folder-listing-from-both-apps-hidden-files-left-out.md)): `list(folder)` gives a `Listing`, the photos as `Entry` (path, companion, `raw`) and the paths that couldn't be opened.
+- **PhotoDev,** in place of its `folder.rs`: it sets `edited` itself from its edits files, and takes the library's kinds for a folder's problems, `FolderMissing`, `FolderNotAllowed` and `FolderUnreadable`, in place of its `NotFound` and `Unreadable`.
+- **PhotoMatch,** in place of its `list` in `lib.rs`: the same walk and report, but hidden files and folders left out, a change of behaviour its own record notes when it moves. Every name in PhotoDev's list of 2026-11-20 is public, which [`tests/public_api.rs`](../tests/public_api.rs) checks.
 - **To build:** the library by git at a commit, nothing else of LibRaw's: Cargo fetches its submodule with it (the Cargo book). And on the machine, a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
 - **A `match` on `Problem`** gets a wildcard arm.
 

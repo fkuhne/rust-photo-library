@@ -1,8 +1,8 @@
 //! photo-library: what the owner's photo apps share, so that it exists once (record 0002).
 //!
 //! Each module is moved from PhotoMatch as it is, with its tests (record 0004): photo reading,
-//! thumbnails and problems, and the file writing thumbnails need, in plan step 1.2; folder listing
-//! in step 1.3; ratings and XMP sidecars in step 1.4.
+//! thumbnails and problems, and the file writing thumbnails need, in plan step 1.2; folder listing,
+//! PhotoMatch's and PhotoDev's made one, in step 1.3; ratings and XMP sidecars in step 1.4.
 
 /// LibRaw through `rsraw`, with PhotoMatch's and PhotoDev's additions, re-exported so that an app
 /// reaches the very copy the library builds, LibRaw 0.22.3 included, and needs no dependency of its
@@ -12,6 +12,8 @@ pub use rsraw_sys;
 
 /// Writing a file atomically and durably, through a temporary file.
 pub mod files;
+/// A folder's photos, with its subfolders, and what in it couldn't be opened (record 0007).
+pub mod folder;
 /// Image files through the `image` crate, with their EXIF (PhotoMatch's record 0010).
 pub mod image_file;
 /// HEIC, HEIF and AVIF, decoded by the OS: ImageIO on macOS, WIC on Windows (PhotoMatch's record 0012).

@@ -3,7 +3,7 @@
 //! list is in its handoff of 2026-11-20; PhotoMatch's is checked when it moves, in step 2.1.
 
 use photo_library::problem::Problem;
-use photo_library::{files, photo, raw, rsraw, thumbs};
+use photo_library::{files, folder, photo, raw, rsraw, thumbs};
 
 #[test]
 fn the_names_photodev_uses_are_public() {
@@ -14,8 +14,10 @@ fn the_names_photodev_uses_are_public() {
     // thumbs: the cache, its size, and the image helpers PhotoDev turns, decodes and encodes with.
     let _ = (thumbs::ThumbCache::new, thumbs::ThumbCache::thumbnail, thumbs::ThumbCache::info);
     let _ = (thumbs::THUMB_SIZE, thumbs::upright, thumbs::decode, thumbs::encode);
-    // files, raw.
+    // files, raw, and the folder listing that replaces PhotoDev's `folder.rs` (record 0007).
     let _ = (files::write_atomically, files::write_durably, raw::is_raw);
+    let _: fn(&std::path::Path) -> Result<folder::Listing, Problem> = folder::list;
+    let _ = |entry: folder::Entry| (entry.path, entry.companion, entry.raw);
     // rsraw: PhotoDev's own additions, from the library's copy.
     let _ = (rsraw::RawImage::set_output_color, rsraw::RawImage::set_demosaic, rsraw::RawImage::dcraw_process);
     let _ = (rsraw::RawImage::decoder, rsraw::RawImage::libraw_version, rsraw::RawImage::write_tiff);

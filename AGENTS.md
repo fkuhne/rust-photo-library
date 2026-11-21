@@ -52,6 +52,7 @@ The workspace is the crate `photo-library` at the root, and the vendored `rsraw`
 git submodule update --init      # once, after cloning: LibRaw
 cargo test                       # build, LibRaw included, and run the tests: the moved ones, and tests/public_api.rs, the names the apps use
 cargo build --release            # the library alone
+cargo run --example list_folder -- <folder>   # a folder's photos as the library lists them
 ```
 
 ## Conventions
