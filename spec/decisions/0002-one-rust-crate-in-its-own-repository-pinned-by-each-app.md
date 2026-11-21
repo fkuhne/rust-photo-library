@@ -1,6 +1,6 @@
 # 0002. One Rust crate in its own repository, pinned by each app
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-20
 
 ## Context
@@ -37,8 +37,8 @@ The owner chose the library. Each app is a Tauri 2 app with its own repository: 
 
 ## Assumptions to verify
 
-- [ ] Cargo builds an app with the library as a git dependency at a commit, LibRaw's submodule included. Step 2.1.
-- [ ] A local `[patch]` overrides it while a change is under way. Step 2.1.
+- [x] Cargo builds an app with the library as a git dependency at a commit, LibRaw's submodule included. Step 2.1: PhotoMatch at `9e1b65d`, on 2026-11-21, on the owner's Mac, over SSH through the key in the agent, with `ssh://git@github.com/fkuhne/rust-photo-library.git`, as the Cargo book's "Git Authentication" asks; Cargo fetched LibRaw's submodule with it, and the first `cargo test --lib` built it all in 19.4 s. PhotoMatch's record 0038.
+- [x] A local `[patch]` overrides it while a change is under way. Step 2.1: `[patch."ssh://git@github.com/fkuhne/rust-photo-library.git"]` with `photo-library` by path, added to PhotoMatch's `Cargo.toml` for the try and taken out again; `cargo tree` then took the library, `rsraw` and `rsraw-sys` from the checkout.
 
 ## Sources
 

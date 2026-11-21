@@ -1,6 +1,6 @@
 # 0004. PhotoMatch's code, as it is, is the starting point
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-20
 
 ## Context
@@ -30,7 +30,7 @@ PhotoMatch's library code is the original. PhotoDev's is a copy of seven of its 
 
 ## Assumptions to verify
 
-- [ ] PhotoMatch's tests pass on the library as they did on its own copy. Step 2.1.
+- [x] PhotoMatch's tests pass on the library as they did on its own copy. Step 2.1, on 2026-11-21: the library's 34 tests, the ones that moved from PhotoMatch among them, and the 2 from outside pass here at `9e1b65d`; PhotoMatch's 3 that stayed pass there, and its self-check, 236, 236, 233, 185 and 218 checks ok in its five sample folders, none failed, as on its own copy that morning. Its thumbnails and details came out byte for byte the same, and its sidecars the same but for the time they were written (PhotoMatch's `docs/photo-browser.md`, step 2.57).
 
 ## Sources
 
