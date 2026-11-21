@@ -228,7 +228,13 @@ fn too_small(width: u32, height: u32, want: Want) -> bool {
 /// OM-1, which the list names differently (plan step 2.26).
 fn knows_colours(raw: &rsraw::RawImage) -> bool {
     let colours: &rsraw_sys::libraw_data_t = raw.as_ref();
-    colours.color.cam_xyz[0].iter().any(|&v| v != 0.0)
+    let from_table = colours.color.cam_xyz[0].iter().any(|&v| v != 0.0);
+    // A DNG's own colour matrix, `dng_color`, which LibRaw develops with, deriving `rgb_cam`, but
+    // doesn't copy into `cam_xyz` for a camera its table lacks, as phones' and drones' DNGs show
+    // (record 0010's samples). Its `parsedfields` stay 0 for them, so the matrix itself is looked at.
+    let dng = colours.idata.dng_version != 0;
+    let from_dng = dng && colours.color.dng_color.iter().any(|c| c.colormatrix[0].iter().any(|&v| v != 0.0));
+    from_table || from_dng
 }
 
 /// The photo developed from its RAW data by LibRaw, as a JPEG: at half size, which is faster and
