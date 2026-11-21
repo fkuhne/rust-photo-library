@@ -1,6 +1,6 @@
 # 0008. Ratings: the model, the store and the sidecars move whole
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-21
 
 ## Context
@@ -43,6 +43,10 @@ The owner chose, on 2026-11-21, "as you said":
 
 - [ ] Two apps rating one photo at the same instant is rare enough that the later write undoing the other's change doesn't matter: the owner, using both.
 - [ ] PhotoMatch's sidecars come out the same on the library: step 2.1.
+
+## What the move measured
+
+`cargo test --offline` on the owner's Mac (Apple M3), on 2026-11-21: the 14 tests of `ratings.rs`, the 5 of `sidecar.rs` and the new one pass, with the library's 14 others and the 2 from outside; 15.8 s, Adobe's XMP Toolkit included. `xmp_toolkit` brought 15 packages from crates.io, every one MIT, Apache 2.0 or BSD 3-Clause; two of them, `toml_datetime` and `winnow`, were set back to PhotoMatch's versions ([0006](0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md)).
 
 ## Sources
 

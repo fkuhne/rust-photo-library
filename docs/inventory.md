@@ -119,6 +119,8 @@ What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`
 
 Every one allows MIT or Apache 2.0 publishing and closed use.
 
+Step 1.4 adds `xmp_toolkit` 1.12.1, MIT or Apache 2.0, which builds Adobe's XMP Toolkit, BSD 3-Clause, with expat and zlib (PhotoMatch's `docs/licences.md`), and 14 more packages for it, among them `thiserror`, `num_enum`, `fs_extra` and `toml_edit`: each MIT, Apache 2.0 or BSD 3-Clause, from `cargo metadata` on 2026-11-21; 123 packages from crates.io in all, every one at PhotoMatch's version.
+
 Step 1.3 adds `walkdir` 2.5.0 and `same-file` 1.0.6, both Unlicense or MIT, and on Windows `winapi-util` 0.1.11, Unlicense or MIT, and `windows-sys` 0.61.2, MIT or Apache 2.0: 109 packages from crates.io in all, from `cargo metadata` on 2026-11-21, at PhotoMatch's versions.
 
 ## What moved, and what changed on the way
@@ -133,8 +135,9 @@ The thumbnail cache's format, `CACHE_VERSION` included, and `Problem`'s kinds an
 
 ## For the apps
 
-What an app needs, as of step 1.3:
+What an app needs, as of step 1.4:
 - **The modules are PhotoMatch's,** under the crate's name: `photo_library::photo`, `::raw`, `::image_file`, `::os_image`, `::thumbs`, `::problem`, `::files`, and `photo_library::rsraw` for LibRaw. And `photo_library::folder`, both apps' listing made one ([0007](../spec/decisions/0007-one-folder-listing-from-both-apps-hidden-files-left-out.md)): `list(folder)` gives a `Listing`, the photos as `Entry` (path, companion, `raw`) and the paths that couldn't be opened.
+- **`photo_library::ratings` and `::sidecar`,** PhotoMatch's as they were ([0008](../spec/decisions/0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md)): an app opens its own store, `Ratings::open(file)`, at a file in its data folder, and rates through it; a RAW file's rating reaches its sidecar, and comes back from it when the other app changed it. An image file's rating stays in the app that gave it.
 - **PhotoDev,** in place of its `folder.rs`: it sets `edited` itself from its edits files, and takes the library's kinds for a folder's problems, `FolderMissing`, `FolderNotAllowed` and `FolderUnreadable`, in place of its `NotFound` and `Unreadable`.
 - **PhotoMatch,** in place of its `list` in `lib.rs`: the same walk and report, but hidden files and folders left out, a change of behaviour its own record notes when it moves. Every name in PhotoDev's list of 2026-11-20 is public, which [`tests/public_api.rs`](../tests/public_api.rs) checks.
 - **To build:** the library by git at a commit, nothing else of LibRaw's: Cargo fetches its submodule with it (the Cargo book). And on the machine, a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
@@ -142,6 +145,5 @@ What an app needs, as of step 1.3:
 
 ## Open questions
 
-- Which of `ratings.rs` is the shared model and which is PhotoMatch's store? Step 1.4.
 - Does PhotoMatch answer its thumbnail requests in a way that can abort, as PhotoDev's did? Step 2.1, in PhotoMatch's code.
 - How PhotoMatch's CI fetches the private library ([0002](../spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). PhotoMatch's installers are built by CI, so its next release waits on it.

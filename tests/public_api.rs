@@ -3,7 +3,7 @@
 //! list is in its handoff of 2026-11-20; PhotoMatch's is checked when it moves, in step 2.1.
 
 use photo_library::problem::Problem;
-use photo_library::{files, folder, photo, raw, rsraw, thumbs};
+use photo_library::{files, folder, photo, ratings, raw, rsraw, sidecar, thumbs};
 
 #[test]
 fn the_names_photodev_uses_are_public() {
@@ -18,6 +18,10 @@ fn the_names_photodev_uses_are_public() {
     let _ = (files::write_atomically, files::write_durably, raw::is_raw);
     let _: fn(&std::path::Path) -> Result<folder::Listing, Problem> = folder::list;
     let _ = |entry: folder::Entry| (entry.path, entry.companion, entry.raw);
+    // ratings and sidecars, which PhotoDev will rate with, as PhotoMatch does (record 0008).
+    let _ = (ratings::Ratings::open, ratings::Ratings::get, ratings::Ratings::change, ratings::Ratings::set, ratings::Ratings::sync, ratings::Ratings::flush);
+    let _ = ratings::Rating { pick: ratings::Pick::Picked, stars: 5, label: ratings::Label::Red };
+    let _ = (sidecar::read, sidecar::write, sidecar::path_for, sidecar::has_sidecar);
     // rsraw: PhotoDev's own additions, from the library's copy.
     let _ = (rsraw::RawImage::set_output_color, rsraw::RawImage::set_demosaic, rsraw::RawImage::dcraw_process);
     let _ = (rsraw::RawImage::decoder, rsraw::RawImage::libraw_version, rsraw::RawImage::write_tiff);

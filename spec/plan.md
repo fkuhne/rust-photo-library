@@ -32,7 +32,9 @@ The work, as small steps in order. Each step names the decision records it depen
 - [x] 1.3 Folder listing: PhotoDev's `folder.rs`, with its tests. PhotoMatch's `files.rs` came in step 1.2, as thumbnails need it.
 
   Done on 2026-11-21 ([0007](decisions/0007-one-folder-listing-from-both-apps-hidden-files-left-out.md)): PhotoDev's `folder.rs` couldn't move as it was, so the owner chose one listing made of both apps': PhotoMatch's walk with `walkdir` and its report of what couldn't be opened, PhotoDev's `raw` flag and its leaving out of hidden files and folders. PhotoDev's two tests came, adapted, with three more: a `._` file left out, a folder named with a dot opened, a locked subfolder reported. `cargo test`: 14 tests and the 2 from outside pass on the owner's Mac. `cargo run --example list_folder` gave the sample folders the counts PhotoMatch shows.
-- [ ] 1.4 Ratings and XMP sidecars, moved from PhotoMatch: the ratings model, and the sidecar rules of PhotoMatch's record 0014. What stays as PhotoMatch's own store is decided here. A test that a sidecar keeps Lightroom's fields, and another app's. *Design choices; new record.*
+- [x] 1.4 Ratings and XMP sidecars, moved from PhotoMatch: the ratings model, and the sidecar rules of PhotoMatch's record 0014. What stays as PhotoMatch's own store is decided here. A test that a sidecar keeps Lightroom's fields, and another app's. *Design choices; new record.*
+
+  Done on 2026-11-21 ([0008](decisions/0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md)): `ratings.rs` and `sidecar.rs` moved whole, the model, each app's store and the sidecars, with their 19 tests and a new one, another app's own fields kept; `xmp_toolkit` at PhotoMatch's version. An image file's rating stays with its app, and two apps writing one sidecar at once is an accepted risk. `cargo test`: 34 tests and the 2 from outside pass on the owner's Mac.
 
 ## Phase 2: The apps on it
 

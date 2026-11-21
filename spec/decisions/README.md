@@ -28,4 +28,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0005](0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) | A workspace of three packages, LibRaw always built, and PhotoMatch's modules as the API | Accepted | 2026-11-21 |
 | [0006](0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md) | Dependencies as default requirements, at the apps' versions; the lockfile for the library's own builds | Accepted | 2026-11-21 |
 | [0007](0007-one-folder-listing-from-both-apps-hidden-files-left-out.md) | One folder listing from both apps, hidden files and folders left out | Accepted | 2026-11-21 |
-| [0008](0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md) | Ratings: the model, the store and the sidecars move whole | Proposed | 2026-11-21 |
+| [0008](0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md) | Ratings: the model, the store and the sidecars move whole | Accepted | 2026-11-21 |

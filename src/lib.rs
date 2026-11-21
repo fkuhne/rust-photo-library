@@ -2,7 +2,8 @@
 //!
 //! Each module is moved from PhotoMatch as it is, with its tests (record 0004): photo reading,
 //! thumbnails and problems, and the file writing thumbnails need, in plan step 1.2; folder listing,
-//! PhotoMatch's and PhotoDev's made one, in step 1.3; ratings and XMP sidecars in step 1.4.
+//! PhotoMatch's and PhotoDev's made one, in step 1.3; ratings and XMP sidecars, the model and the
+//! store with them, in step 1.4.
 
 /// LibRaw through `rsraw`, with PhotoMatch's and PhotoDev's additions, re-exported so that an app
 /// reaches the very copy the library builds, LibRaw 0.22.3 included, and needs no dependency of its
@@ -22,8 +23,14 @@ pub mod os_image;
 pub mod photo;
 /// Problems as kinds, for the apps' interfaces to word (PhotoMatch's record 0022).
 pub mod problem;
+/// Picks, stars and colour labels: the model, and each app's store of them, kept in step with the
+/// sidecars, the newer change winning (PhotoMatch's record 0014, the library's record 0008).
+pub mod ratings;
 /// RAW files through LibRaw (PhotoMatch's records 0007, 0016 and 0033).
 pub mod raw;
+/// XMP sidecars beside RAW files, as Lightroom Classic and Capture One read them: only the pick,
+/// the stars and the label changed, all else kept (PhotoMatch's record 0014).
+pub mod sidecar;
 /// Thumbnails, details and the large view's images, cached on disk (PhotoMatch's records 0015 and 0034).
 pub mod thumbs;
 
