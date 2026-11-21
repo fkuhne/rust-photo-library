@@ -5,16 +5,16 @@
 
 ## Context
 
-On 2026-11-20 the owner said of the library: "we can even think in distributing it as an open source library or something that others can reuse it." The apps that use it are closed, so that they can be sold (Photomatch's record 0017, PhotoDev's 0005). Two options were offered the same day:
+On 2026-11-20 the owner said of the library: "we can even think in distributing it as an open source library or something that others can reuse it." The apps that use it are closed, so that they can be sold (PhotoMatch's record 0017, PhotoDev's 0005). Two options were offered the same day:
 - private now, decided later, written so that it can be opened;
 - open from the start.
 
 The owner didn't pick, and went on to name the repository. The first is taken as a default, for the owner's review in step 0.2.
 
 What the library holds, by licence:
-- the owner's own code, from Photomatch and PhotoDev;
+- the owner's own code, from PhotoMatch and PhotoDev;
 - `rsraw` and `rsraw-sys`, MIT;
-- LibRaw, CDDL 1.0 or LGPL 2.1, used under CDDL 1.0, as Photomatch uses it (its record 0013).
+- LibRaw, CDDL 1.0 or LGPL 2.1, used under CDDL 1.0, as PhotoMatch uses it (its record 0013).
 
 ## Decision
 

@@ -4,11 +4,11 @@ Instructions for coding agents working in this repository. Keep this file short:
 
 ## What this is
 
-rust-photo-library is the Rust library, the crate `photo-library`, that the owner's photo apps share: Photomatch, PhotoDev, and next PhotoBook. It holds:
+rust-photo-library is the Rust library, the crate `photo-library`, that the owner's photo apps share: PhotoMatch, PhotoDev, and next PhotoBook. It holds:
 - what they had been copying from one another: reading RAW and image files, HEIC and AVIF through the OS, thumbnails, LibRaw's build with one `rsraw`, folder listing;
 - the ratings that travel in XMP sidecars.
 
-It starts from Photomatch's code, as it is ([0004](spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)). Each app depends on it at a pinned commit ([0002](spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). It's private for now, written so it can be opened ([0003](spec/decisions/0003-private-now-written-so-it-can-be-opened.md)).
+It starts from PhotoMatch's code, as it is ([0004](spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)). Each app depends on it at a pinned commit ([0002](spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). It's private for now, written so it can be opened ([0003](spec/decisions/0003-private-now-written-so-it-can-be-opened.md)).
 
 Who uses it:
 - **The owner** builds the apps, and is the person you work with.
@@ -62,7 +62,7 @@ cargo build --release            # the library alone
 - **Nothing large in git.** Photos and test files stay out of it: the tests read the apps' test RAWs from outside, as PhotoDev's do (`PHOTODEV_TEST_RAWS`). Report disk use after a step that writes data.
 - **No money is spent without a record:** hardware, rented compute and paid APIs.
 - **The planning machine is where it's built and tested,** for now: the owner's Mac. GitHub's minutes cost the owner money, and its credits are spent: start no workflow without the owner's word.
-- **Moved, not rewritten.** Code comes from Photomatch as it is, with its tests; a behaviour change is a step of its own, with a record ([0004](spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)).
+- **Moved, not rewritten.** Code comes from PhotoMatch as it is, with its tests; a behaviour change is a step of its own, with a record ([0004](spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)).
 - **Each app is changed in its own repository,** with a record there, and its own tests and self-check run before its pin moves ([0002](spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). Check an app's `git status` before touching it: the owner works on the apps in parallel.
 - **A local `[patch]` pointing an app at this folder is never committed** in the app ([0002](spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)).
 - **Ready to open.** Every dependency must allow MIT or Apache 2.0 publishing and closed use; list it in the inventory as it comes in. No GPL or AGPL code. No secret, path or private name in the code ([0003](spec/decisions/0003-private-now-written-so-it-can-be-opened.md)).

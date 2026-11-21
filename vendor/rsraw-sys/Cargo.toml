@@ -1,5 +1,5 @@
 # A copy of rsraw-sys 0.1.1 (MIT, https://github.com/hexilee/rsraw), building LibRaw 0.22.3
-# from the submodule in LibRaw/ instead of the 0.21.3 it bundles (Photomatch's record 0013).
+# from the submodule in LibRaw/ instead of the 0.21.3 it bundles (PhotoMatch's record 0013).
 # In photo-library, rsraw and photo-library reach it by path (the library's record 0005).
 [package]
 name = "rsraw-sys"

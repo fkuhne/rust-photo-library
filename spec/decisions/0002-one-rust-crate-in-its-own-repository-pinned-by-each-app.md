@@ -23,7 +23,7 @@ The owner chose the library. Each app is a Tauri 2 app with its own repository: 
 | Option | Why we didn't choose it |
 |---|---|
 | Copying on | The owner chose a library. The copies had begun to drift, and two apps now write the same sidecars |
-| The library as a crate inside Photomatch's repository | The other apps would depend on Photomatch's whole repository, and its decisions would mix with Photomatch's |
+| The library as a crate inside PhotoMatch's repository | The other apps would depend on PhotoMatch's whole repository, and its decisions would mix with PhotoMatch's |
 | A git submodule of the library in each app | The apps would carry its whole source tree, and moving to a new version would mean moving the submodule; a git dependency pins the same commit with less in each repository |
 | A path dependency, committed | It works only on a machine with the same folders, and never in CI |
 | Published on crates.io now | It would be public, before the owner has chosen to open it |
@@ -31,7 +31,7 @@ The owner chose the library. Each app is a Tauri 2 app with its own repository: 
 ## Consequences
 
 - **One place to fix:** a fix in the library reaches each app when its pin moves.
-- **The apps can move at their own pace:** Photomatch can stay on an older commit while PhotoDev moves on.
+- **The apps can move at their own pace:** PhotoMatch can stay on an older commit while PhotoDev moves on.
 - **CI, when it runs again, needs credentials** to fetch a private git dependency: a deploy key or a token (unchecked how GitHub Actions does it). Until then, nothing is lost: CI is off.
 - **A local `[patch]` must never be committed** in an app. Each app's `AGENTS.md` says so.
 

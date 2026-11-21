@@ -4,9 +4,9 @@ What each of the owner's photo apps had copied from the others, where it came fr
 
 First pass on 2026-11-20, before anything moved.
 
-## Photomatch's library code
+## PhotoMatch's library code
 
-At Photomatch's commit `b959990`, 2026-11-20, in `app/src-tauri/src/`, from `wc -l`:
+At PhotoMatch's commit `b959990`, 2026-11-20, in `app/src-tauri/src/`, from `wc -l`:
 
 | File | Lines | What it does |
 |---|---|---|
@@ -17,19 +17,19 @@ At Photomatch's commit `b959990`, 2026-11-20, in `app/src-tauri/src/`, from `wc 
 | `os_image.rs` | 330 | HEIC, HEIF and AVIF through the OS: ImageIO on macOS, WIC on Windows |
 | `thumbs.rs` | 495 | Thumbnails and details cached on disk; the large view's images |
 | `problem.rs` | 178 | Problems as kinds, for the interface to word |
-| `ratings.rs` | 769 | Pick, stars and label, kept in Photomatch's store |
-| `sidecar.rs` | 260 | XMP sidecars beside RAW files, by Photomatch's record 0014 |
+| `ratings.rs` | 769 | Pick, stars and label, kept in PhotoMatch's store |
+| `sidecar.rs` | 260 | XMP sidecars beside RAW files, by PhotoMatch's record 0014 |
 | **Total** | **2,697** | |
 
-Not everything in `ratings.rs` belongs in the library: Photomatch's own store of ratings, for instance, may stay Photomatch's. Step 1.4 decides.
+Not everything in `ratings.rs` belongs in the library: PhotoMatch's own store of ratings, for instance, may stay PhotoMatch's. Step 1.4 decides.
 
-Some of it is recent, and Photomatch's own so far (its notes, read on 2026-11-20). It moves as it is, and step 1.1 decides what the library shows of it:
-- **In `thumbs.rs`:** the limit on the full-size photos kept, 2 GB, oldest first, and making one ahead of a zoom (`prepare_full`, `trim_full`, the counters `fulls_made` and `prepared`; Photomatch's records 0034 and 0035).
-- **In `problem.rs`:** `NeedsWindowsExtension`'s `codec_only`, for a HEIC whose HEVC codec Windows lacks (Photomatch's record 0028).
+Some of it is recent, and PhotoMatch's own so far (its notes, read on 2026-11-20). It moves as it is, and step 1.1 decides what the library shows of it:
+- **In `thumbs.rs`:** the limit on the full-size photos kept, 2 GB, oldest first, and making one ahead of a zoom (`prepare_full`, `trim_full`, the counters `fulls_made` and `prepared`; PhotoMatch's records 0034 and 0035).
+- **In `problem.rs`:** `NeedsWindowsExtension`'s `codec_only`, for a HEIC whose HEVC codec Windows lacks (PhotoMatch's record 0028).
 
-### Photomatch's records behind the code
+### PhotoMatch's records behind the code
 
-The code moves as it is ([0004](../spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)), and these records of Photomatch's say why it's as it is:
+The code moves as it is ([0004](../spec/decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)), and these records of PhotoMatch's say why it's as it is:
 
 | Record | Title | Behind |
 |---|---|---|
@@ -49,15 +49,15 @@ The code moves as it is ([0004](../spec/decisions/0004-photomatch-s-code-as-it-i
 
 ## PhotoDev's copy
 
-PhotoDev copied the first seven files at Photomatch's commit `9217996`, into `app/core/src/library/` (PhotoDev's commit `a539dc7`), 1,668 lines.
+PhotoDev copied the first seven files at PhotoMatch's commit `9217996`, into `app/core/src/library/` (PhotoDev's commit `a539dc7`), 1,668 lines.
 
-Compared with Photomatch's files at `b959990` on 2026-11-20, after the same path changes, they differ only by PhotoDev's own small changes:
+Compared with PhotoMatch's files at `b959990` on 2026-11-20, after the same path changes, they differ only by PhotoDev's own small changes:
 - `photo.rs`, `raw.rs`, `image_file.rs`, `files.rs`: no line differs.
 - `os_image.rs`: 4 lines, two paths in nested modules.
 - `thumbs.rs`: 3 lines, `upright` made visible, with a comment.
 - `problem.rs`: 6 lines, paths in its test module.
 
-So Photomatch's seven files didn't change between `9217996` and `b959990`.
+So PhotoMatch's seven files didn't change between `9217996` and `b959990`.
 
 PhotoDev's own library code, written for it, may move in too:
 - `folder.rs`, folder listing;
@@ -69,7 +69,7 @@ The first belongs in the library. The second is PhotoDev's.
 
 Both are copies of `rsraw` 0.1.1 and `rsraw-sys` 0.1.1 (MIT, `hexilee/rsraw`), with LibRaw 0.22.3 as a git submodule, pinned to commit `cf02d66`.
 
-- **Photomatch's additions,** from the comments marking them in `vendor/rsraw/src/`:
+- **PhotoMatch's additions,** from the comments marking them in `vendor/rsraw/src/`:
   - `open_file`, through LibRaw's own reader, closing the handle when opening fails;
   - `list_thumbs`, `extract_thumb` and `ThumbListing`;
   - the error type, exported;
@@ -82,26 +82,26 @@ Both are copies of `rsraw` 0.1.1 and `rsraw-sys` 0.1.1 (MIT, `hexilee/rsraw`), w
   - `color_data`, `dng_baseline_exposure`, `decoder` and `libraw_version`.
 
   Its plan steps 1.2 to 2.1.
-- **PhotoDev's copy holds Photomatch's additions too,** as it was copied from Photomatch's. So the merged `rsraw` is PhotoDev's, with each addition marked by whose it was.
+- **PhotoDev's copy holds PhotoMatch's additions too,** as it was copied from PhotoMatch's. So the merged `rsraw` is PhotoDev's, with each addition marked by whose it was.
 - **`rsraw-sys`:** the two build scripts and manifests differ by 6 lines, PhotoDev's header comment.
 
 ## PhotoBook's photo module
 
-PhotoBook's `app/src-tauri/src/photo/`: `mod.rs` and `tests.rs`, 338 lines, from `wc -l` on 2026-11-20. It reads JPEG and PNG files with their EXIF orientation, derived from Photomatch's. It moves in next, after Photomatch and PhotoDev ([`product.md`](../spec/product.md#scope)).
+PhotoBook's `app/src-tauri/src/photo/`: `mod.rs` and `tests.rs`, 338 lines, from `wc -l` on 2026-11-20. It reads JPEG and PNG files with their EXIF orientation, derived from PhotoMatch's. It moves in next, after PhotoMatch and PhotoDev ([`product.md`](../spec/product.md#scope)).
 
 ## Licences of what moves in
 
-From Photomatch's `docs/licences.md`, read on 2026-11-20, and PhotoDev's checks of the same versions:
+From PhotoMatch's `docs/licences.md`, read on 2026-11-20, and PhotoDev's checks of the same versions:
 
 | Dependency | Version | Licence | Allows MIT or Apache 2.0 publishing, and closed use |
 |---|---|---|---|
 | `rsraw`, `rsraw-sys` | 0.1.1, our copies | MIT | Yes |
-| LibRaw | 0.22.3 | CDDL 1.0 or LGPL 2.1, used under CDDL 1.0 | Yes: CDDL is file by file. Its source must be offered with binaries, as Photomatch does (its `docs/licences.md`) |
+| LibRaw | 0.22.3 | CDDL 1.0 or LGPL 2.1, used under CDDL 1.0 | Yes: CDDL is file by file. Its source must be offered with binaries, as PhotoMatch does (its `docs/licences.md`) |
 | `image` | 0.25.10 | MIT or Apache 2.0 | Yes |
 | `jpeg-decoder` | 0.3.2 | MIT or Apache 2.0 | Yes |
 | `kamadak-exif` | 0.6.1 | BSD 2-Clause | Yes |
 | `blake3` | 1.8.7 | CC0 1.0, Apache 2.0, or Apache 2.0 with LLVM's exception | Yes |
-| `xmp_toolkit` | 1.12.1 | MIT or Apache 2.0; it builds Adobe's XMP Toolkit, BSD 3-Clause, with expat and zlib (Photomatch's `docs/licences.md`) | Yes (unchecked for the toolkit's own terms beyond its notices) |
+| `xmp_toolkit` | 1.12.1 | MIT or Apache 2.0; it builds Adobe's XMP Toolkit, BSD 3-Clause, with expat and zlib (PhotoMatch's `docs/licences.md`) | Yes (unchecked for the toolkit's own terms beyond its notices) |
 | `serde`, `serde_json` | 1.0.229, 1.0.154 | MIT or Apache 2.0 | Yes |
 | `windows`, on Windows | 0.62.2 | MIT or Apache 2.0 (unchecked here) | Yes |
 
@@ -109,7 +109,7 @@ None is GPL or AGPL.
 
 ### The skeleton's whole graph
 
-What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`, and 63 packages from crates.io, with the versions Photomatch's `Cargo.lock` has at commit `391fd74`, from which the lockfile was seeded. Their licences, from `cargo metadata` on 2026-11-21:
+What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`, and 63 packages from crates.io, with the versions PhotoMatch's `Cargo.lock` has at commit `391fd74`, from which the lockfile was seeded. Their licences, from `cargo metadata` on 2026-11-21:
 - **MIT or Apache 2.0, one or both:** 55 packages, among them `cc` 1.10.0, `libc` 0.2.191, `chrono` 0.4.45, `serde` 1.0.229 and `regex` 1.13.1. `tracing` 0.1.44, `nom` 7.1.3 and `slab` 0.4.12 are MIT alone; `unicode-ident` adds Unicode 3.0.
 - **BSD 3-Clause:** `bindgen` 0.71.1, a build tool that writes `rsraw-sys`'s bindings.
 - **Apache 2.0:** `clang-sys` 1.9.1, which `bindgen` uses.
@@ -121,6 +121,6 @@ Every one allows MIT or Apache 2.0 publishing and closed use.
 
 ## Open questions
 
-- Which of `ratings.rs` is the shared model and which is Photomatch's store? Step 1.4.
-- Does Photomatch answer its thumbnail requests in a way that can abort, as PhotoDev's did? Step 2.1, in Photomatch's code.
-- How Photomatch's CI fetches the private library ([0002](../spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). Photomatch's installers are built by CI, so its next release waits on it.
+- Which of `ratings.rs` is the shared model and which is PhotoMatch's store? Step 1.4.
+- Does PhotoMatch answer its thumbnail requests in a way that can abort, as PhotoDev's did? Step 2.1, in PhotoMatch's code.
+- How PhotoMatch's CI fetches the private library ([0002](../spec/decisions/0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md)). PhotoMatch's installers are built by CI, so its next release waits on it.

@@ -1,7 +1,7 @@
 //! photo-library: what the owner's photo apps share, so that it exists once (record 0002).
 //!
 //! Photo reading, thumbnails and problems come in plan step 1.2, folder listing and file writing in
-//! step 1.3, and ratings and XMP sidecars in step 1.4, each moved from Photomatch as it is, with its
+//! step 1.3, and ratings and XMP sidecars in step 1.4, each moved from PhotoMatch as it is, with its
 //! tests (record 0004).
 
 #[cfg(test)]

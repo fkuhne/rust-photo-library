@@ -24,7 +24,7 @@ unsafe impl Send for RawImage {}
 
 impl RawImage {
     /// LibRaw keeps a pointer into `buf` until the image is dropped: the caller keeps `buf`
-    /// alive that long. (Photomatch: LibRaw's handle is closed if opening fails.)
+    /// alive that long. (PhotoMatch: LibRaw's handle is closed if opening fails.)
     pub fn open(buf: &[u8]) -> Result<Self> {
         let image = Self { raw_data: unsafe { sys::libraw_init(0) } };
         Error::check(unsafe {
@@ -80,7 +80,7 @@ impl RawImage {
     }
 
     /// The previews the file holds, as LibRaw lists them, before any is taken out: a size of
-    /// 0 × 0 is one LibRaw doesn't know. (Added for Photomatch, plan step 2.24.)
+    /// 0 × 0 is one LibRaw doesn't know. (Added for PhotoMatch, plan step 2.24.)
     pub fn list_thumbs(&self) -> Vec<ThumbListing> {
         let list = &self.as_ref().thumbs_list;
         list.thumblist[..list.thumbcount.clamp(0, list.thumblist.len() as i32) as usize]
@@ -95,7 +95,7 @@ impl RawImage {
     }
 
     /// Takes out the preview at `index` of `list_thumbs`, reading only that from a file opened
-    /// with `open_file`. (Added for Photomatch, plan step 2.24.)
+    /// with `open_file`. (Added for PhotoMatch, plan step 2.24.)
     pub fn extract_thumb(&mut self, index: usize) -> Result<ThumbnailImage> {
         Error::check(unsafe { sys::libraw_unpack_thumb_ex(self.raw_data, index as _) })?;
         let thumb = &self.as_ref().thumbnail;

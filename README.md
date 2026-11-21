@@ -1,6 +1,6 @@
 # rust-photo-library
 
-The Rust library, the crate `photo-library`, shared by the owner's photo apps: Photomatch, PhotoDev, and next PhotoBook. It holds what they had been copying from one another:
+The Rust library, the crate `photo-library`, shared by the owner's photo apps: PhotoMatch, PhotoDev, and next PhotoBook. It holds what they had been copying from one another:
 - reading RAW files through LibRaw, image files, and HEIC and AVIF through the OS;
 - thumbnails cached on disk;
 - LibRaw's build, with one `rsraw`;

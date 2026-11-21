@@ -6,7 +6,7 @@ mod processed;
 mod raw;
 mod thumb;
 
-// Photomatch: the error type, for callers to name it (plan step 2.24).
+// PhotoMatch: the error type, for callers to name it (plan step 2.24).
 pub use err::Error;
 pub use gps::{GpsInfo, GpsParseError};
 pub use lens::{FocusType, LensInfo};

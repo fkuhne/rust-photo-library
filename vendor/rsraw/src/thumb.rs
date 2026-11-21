@@ -18,7 +18,7 @@ pub struct Thumbnails {
     thumbs: Vec<ThumbnailImage>,
 }
 
-/// A preview as LibRaw lists it, before it's taken out. (Added for Photomatch, plan step 2.24.)
+/// A preview as LibRaw lists it, before it's taken out. (Added for PhotoMatch, plan step 2.24.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ThumbListing {
     pub width: u32,
