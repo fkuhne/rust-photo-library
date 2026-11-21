@@ -11,10 +11,21 @@ use crate::thumbs;
 /// The JPEG quality of a photo developed from its RAW data, as for the large view's.
 const DEVELOPED_QUALITY: u8 = 90;
 
-/// The RAW extensions this build opens: Sony's ARW, and a first look at the other makers'
-/// formats (R13, plan step 2.4): Canon, Nikon, Fujifilm, Leica, Panasonic, Olympus and OM
-/// System, Pentax, and DNG from Leica, Ricoh, Pentax and others.
-const EXTENSIONS: &[&str] = &["arw", "cr2", "cr3", "nef", "raf", "dng", "rw2", "rwl", "orf", "pef"];
+/// The RAW extensions listed: every still photo's that LibRaw reads and has the colours for, so
+/// that the app can show it (record 0009). LibRaw knows a file by its contents, not its name, so a
+/// file named so that it can't read shows as one it can't. Left out: video RAW (`.ari`, `.cine`,
+/// `.cin`, `.r3d`); `.hdr`, which Radiance HDR images share; GoPro's `.gpr`, which LibRaw reads
+/// only with GoPro's SDK, and Sigma's `.x3f`, only with code it leaves off by default; and the
+/// oldest cameras' formats, for which it has no colour matrix: `.mdc`, `.dc2`, `.k25`, `.kc2`,
+/// `.pxn` and `.bay`.
+const EXTENSIONS: &[&str] = &[
+    // PhotoMatch's first ten (its plan steps 2.4 and later).
+    "arw", "cr2", "cr3", "nef", "raf", "dng", "rw2", "rwl", "orf", "pef",
+    // Each read and developed from a sample from raw.pixls.us (record 0009).
+    "3fr", "arq", "crw", "dcr", "erf", "fff", "iiq", "kdc", "mos", "mrw", "nrw", "ori", "raw", "sr2", "srf", "srw", "sti",
+    // No sample to try; LibRaw names the cameras that write them, and has their colours (record 0009).
+    "cap", "cs1", "ia", "mef", "qtk",
+];
 
 pub fn is_raw(path: &Path) -> bool {
     has_extension(path, EXTENSIONS)
@@ -130,7 +141,8 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
         make: raw.make().trim().to_string(),
         model: raw.model().trim().to_string(),
         lens: lens.lens_name.trim().to_string(),
-        captured_at: raw.datetime().map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+        // LibRaw's 0 is a photo without its time, as a Leaf back's, not 1 January 1970 (record 0009).
+        captured_at: raw.datetime().filter(|_| data.other.timestamp > 0).map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
         iso: raw.iso_speed(),
         shutter_seconds: raw.shutter(),
         aperture: raw.aperture(),
@@ -156,7 +168,8 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
     let full = want == Want::Full;
     let full_size = |p: &Preview| p.width.max(p.height) as u64 * 10 >= width.max(height) as u64 * 9;
     let mut no_preview = None;
-    if previews.is_empty() || always_develop || (full && !previews.iter().any(full_size)) {
+    let small = previews.last().is_some_and(|p| too_small(p.width, p.height, want));
+    if previews.is_empty() || always_develop || (full && !previews.iter().any(full_size)) || small {
         if knows_colours(&raw) {
             // A photo developed at full size takes its tones from the camera's own preview, so
             // zooming in shows more detail, not another look (plan step 2.26).
@@ -178,6 +191,19 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
     };
 
     Ok(Photo { previews, no_preview, orientation, info })
+}
+
+/// The long side under which a preview is too small for the large view, if it's under half the
+/// size asked for too: older cameras embed 640 × 480, a Leaf back 332 × 244, while the smallest
+/// preview of a newer camera tried, older Sony bodies', is 1616 × 1080 (record 0009).
+const SMALL_PREVIEW: u32 = 1280;
+
+/// Whether a preview is too small for what's asked, so that the RAW data developed at half size
+/// takes its place, sharper (record 0015; record 0009). Never at full resolution, which has its
+/// own rule, and never for a newer camera's preview, whichever the screen.
+fn too_small(width: u32, height: u32, want: Want) -> bool {
+    let long = width.max(height);
+    matches!(want, Want::AtLeast(asked) if long * 2 < asked && long < SMALL_PREVIEW)
 }
 
 /// Whether LibRaw has the camera's colours, to develop its photos: its colour matrix, which
@@ -242,6 +268,34 @@ fn match_tones(developed: &mut image::RgbImage, reference: &image::RgbImage) {
     for pixel in developed.pixels_mut() {
         for channel in 0..3 {
             pixel[channel] = maps[channel][pixel[channel] as usize];
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A preview under half the size asked for and under 1280 pixels long gives way to the RAW
+    /// data developed; a newer camera's never does, even on a 4K screen (record 0009).
+    #[test]
+    fn only_an_older_camera_s_small_preview_gives_way_to_the_raw_data() {
+        assert!(too_small(640, 480, Want::AtLeast(2560)), "640 × 480 on a screen");
+        assert!(too_small(332, 244, Want::AtLeast(800)), "332 × 244 for a thumbnail");
+        assert!(!too_small(640, 480, Want::AtLeast(800)), "640 × 480 for a thumbnail");
+        assert!(!too_small(1616, 1080, Want::AtLeast(3840)), "1616 × 1080 on a 4K screen");
+        assert!(!too_small(332, 244, Want::Full) && !too_small(332, 244, Want::Largest) && !too_small(332, 244, Want::Smallest));
+    }
+
+    /// Still photos' RAW extensions are listed, in either case; video RAW, Radiance's HDR images
+    /// and the formats the app can't show aren't (record 0009).
+    #[test]
+    fn still_photo_raw_extensions_are_listed_and_video_raw_isn_t() {
+        for name in ["DSC1.ARW", "DSC1.SR2", "dsc1.srf", "IMG_1.CRW", "P1.RAW", "H.3FR", "CF.IIQ", "S.STI", "Q.QTK", "D.ARQ"] {
+            assert!(is_raw(Path::new(name)), "{name} isn't listed");
+        }
+        for name in ["clip.ari", "clip.R3D", "clip.cine", "clip.cin", "sky.hdr", "G.GPR", "B.X3F", "M.MDC", "DSC1.JPG", "DSC1.xmp", "DSC1"] {
+            assert!(!is_raw(Path::new(name)), "{name} is listed");
         }
     }
 }

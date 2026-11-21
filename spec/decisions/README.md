@@ -29,3 +29,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0006](0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md) | Dependencies as default requirements, at the apps' versions; the lockfile for the library's own builds | Accepted | 2026-11-21 |
 | [0007](0007-one-folder-listing-from-both-apps-hidden-files-left-out.md) | One folder listing from both apps, hidden files and folders left out | Accepted | 2026-11-21 |
 | [0008](0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md) | Ratings: the model, the store and the sidecars move whole | Accepted | 2026-11-21 |
+| [0009](0009-every-still-photo-raw-extension-libraw-reads-and-has-colours-for.md) | Every still photo's RAW extension LibRaw reads and has the colours for | Accepted | 2026-11-21 |
