@@ -27,3 +27,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0004](0004-photomatch-s-code-as-it-is-is-the-starting-point.md) | PhotoMatch's code, as it is, is the starting point | Proposed | 2026-11-20 |
 | [0005](0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) | A workspace of three packages, LibRaw always built, and PhotoMatch's modules as the API | Accepted | 2026-11-21 |
 | [0006](0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md) | Dependencies as default requirements, at the apps' versions; the lockfile for the library's own builds | Accepted | 2026-11-21 |
+| [0007](0007-one-folder-listing-from-both-apps-hidden-files-left-out.md) | One folder listing from both apps, hidden files and folders left out | Proposed | 2026-11-21 |
