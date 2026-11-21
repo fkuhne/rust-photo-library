@@ -74,7 +74,7 @@ And two changes to reading, found with the older files:
 
 ## Assumptions to verify
 
-- [ ] PhotoMatch's self-check passes on the new samples, and its old folders' thumbnails stay byte for byte the same.
+- [x] PhotoMatch's self-check passes on the new samples, and its old folders' thumbnails stay byte for byte the same. On 2026-11-21, PhotoMatch at this commit (its `5428a28`): 236, 236, 233, 185, 219 and 236 checks ok in its six folders, `older-formats` among them, none failed; its five old folders' thumbnails and details byte for byte the same as its own build before the move.
 - [ ] `cap`, `cs1`, `ia`, `mef` and `qtk` files open: no sample to try (unchecked).
 - [ ] A Leaf back's photo has no time to read, rather than one LibRaw misses (unchecked).
 
