@@ -1,6 +1,6 @@
 # 0005. A workspace of three packages, LibRaw always built, and Photomatch's modules as the API
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-21
 
 ## Context
@@ -39,7 +39,7 @@ The owner chose, on 2026-11-20, "as you said":
 
 ## Assumptions to verify
 
-- [ ] The workspace builds and its tests pass on the owner's Mac, LibRaw 0.22.3 linked: this step.
+- [x] The workspace builds and its tests pass on the owner's Mac, LibRaw 0.22.3 linked: `cargo test --offline` on 2026-11-21, on the owner's Mac (Apple M3, macOS 14.3), 15.5 s from nothing, its one test passing, LibRaw's own version string starting `0.22.3`.
 - [ ] An app builds with the library as a git dependency at a commit, LibRaw's submodule fetched with it: step 2.1.
 
 ## Sources

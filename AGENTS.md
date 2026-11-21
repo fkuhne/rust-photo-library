@@ -46,7 +46,13 @@ What the project covers is in [`spec/product.md`](spec/product.md). What each ap
 
 ## Commands
 
-None yet. The crate arrives in plan step 1.1, and each step adds its commands here.
+The workspace is the crate `photo-library` at the root, and the vendored `rsraw` and `rsraw-sys` in `vendor/`, with LibRaw 0.22.3 as `rsraw-sys`'s submodule ([0005](spec/decisions/0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md)). It needs Rust (through rustup), a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
+
+```sh
+git submodule update --init      # once, after cloning: LibRaw
+cargo test                       # build, LibRaw included, and run the tests
+cargo build --release            # the library alone
+```
 
 ## Conventions
 

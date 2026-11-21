@@ -107,6 +107,18 @@ From Photomatch's `docs/licences.md`, read on 2026-11-20, and PhotoDev's checks 
 
 None is GPL or AGPL.
 
+### The skeleton's whole graph
+
+What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`, and 63 packages from crates.io, with the versions Photomatch's `Cargo.lock` has at commit `391fd74`, from which the lockfile was seeded. Their licences, from `cargo metadata` on 2026-11-21:
+- **MIT or Apache 2.0, one or both:** 55 packages, among them `cc` 1.10.0, `libc` 0.2.191, `chrono` 0.4.45, `serde` 1.0.229 and `regex` 1.13.1. `tracing` 0.1.44, `nom` 7.1.3 and `slab` 0.4.12 are MIT alone; `unicode-ident` adds Unicode 3.0.
+- **BSD 3-Clause:** `bindgen` 0.71.1, a build tool that writes `rsraw-sys`'s bindings.
+- **Apache 2.0:** `clang-sys` 1.9.1, which `bindgen` uses.
+- **ISC:** `libloading` 0.8.9.
+- **Unlicense or MIT:** `aho-corasick` 1.1.5 and `memchr` 2.8.3.
+- **MIT, Apache 2.0, or LGPL 2.1 or later:** `r-efi` 6.0.0, a dependency of `getrandom` for UEFI targets, used under MIT or Apache 2.0.
+
+Every one allows MIT or Apache 2.0 publishing and closed use.
+
 ## Open questions
 
 - Which of `ratings.rs` is the shared model and which is Photomatch's store? Step 1.4.

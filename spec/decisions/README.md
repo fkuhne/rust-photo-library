@@ -25,4 +25,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0002](0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md) | One Rust crate in its own repository, pinned by each app | Proposed | 2026-11-20 |
 | [0003](0003-private-now-written-so-it-can-be-opened.md) | Private now, written so it can be opened | Proposed | 2026-11-20 |
 | [0004](0004-photomatch-s-code-as-it-is-is-the-starting-point.md) | Photomatch's code, as it is, is the starting point | Proposed | 2026-11-20 |
-| [0005](0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) | A workspace of three packages, LibRaw always built, and Photomatch's modules as the API | Proposed | 2026-11-21 |
+| [0005](0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) | A workspace of three packages, LibRaw always built, and Photomatch's modules as the API | Accepted | 2026-11-21 |

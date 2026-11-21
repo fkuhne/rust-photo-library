@@ -1,0 +1,3 @@
+[submodule "vendor/rsraw-sys/LibRaw"]
+	path = vendor/rsraw-sys/LibRaw
+	url = https://github.com/LibRaw/LibRaw.git

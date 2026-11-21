@@ -1,0 +1,19 @@
+# photo-library, the crate the owner's photo apps share (records 0002 and 0005). Its vendored
+# rsraw and rsraw-sys are members of this workspace and reached by path: a [patch] here would be
+# ignored in the apps that depend on the library, which would then build the published
+# rsraw-sys, with LibRaw 0.21.3.
+[package]
+name = "photo-library"
+version = "0.1.0"
+edition = "2024"
+description = "Reading RAW and image files, thumbnails and ratings in XMP sidecars, shared by the owner's photo apps."
+repository = "https://github.com/fkuhne/rust-photo-library"
+# Private for now (record 0003): never published by mistake.
+publish = false
+
+[dependencies]
+rsraw = { path = "vendor/rsraw" }
+rsraw-sys = { path = "vendor/rsraw-sys" }
+
+[workspace]
+members = ["vendor/rsraw", "vendor/rsraw-sys"]

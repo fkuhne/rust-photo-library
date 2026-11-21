@@ -23,7 +23,9 @@ The work, as small steps in order. Each step names the decision records it depen
 
 ## Phase 1: The library
 
-- [ ] 1.1 The crate's skeleton, `photo-library`, in a Cargo workspace with the vendored `rsraw` and `rsraw-sys`, and LibRaw 0.22.3 as a submodule. It builds and its tests run on the owner's Mac. Licences listed in the inventory. *Design choices: one crate or several, such as LibRaw's apart, and what each module exposes; new record.*
+- [x] 1.1 The crate's skeleton, `photo-library`, in a Cargo workspace with the vendored `rsraw` and `rsraw-sys`, and LibRaw 0.22.3 as a submodule. It builds and its tests run on the owner's Mac. Licences listed in the inventory. *Design choices: one crate or several, such as LibRaw's apart, and what each module exposes; new record.*
+
+  Done on 2026-11-21 ([0005](decisions/0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) accepted): a workspace of `photo-library` and the vendored `rsraw` and `rsraw-sys`, copied from Photomatch unchanged but for one marked line, `rsraw`'s dependency on `rsraw-sys` by path; LibRaw as a submodule at `cf02d66`, 0.22.3. `cargo test` built it and passed its first test, LibRaw 0.22.3 linked, in 15.5 s on the owner's Mac (Apple M3), with Photomatch's dependency versions; 63 packages from crates.io, every licence listed in [`docs/inventory.md`](../docs/inventory.md). Disk: 234 MB of build files in `target/`, 3.3 MB of LibRaw's sources, and 17 MB in `.git`.
 - [ ] 1.2 Photo reading, thumbnails and problems, moved from Photomatch at its commit then, with their tests; `rsraw` merged from the two copies, each addition marked by whose it was; PhotoDev's one visible function. Photomatch's tests pass in the library.
 - [ ] 1.3 Folder listing and file writing: Photomatch's `files.rs` and PhotoDev's `folder.rs`, with their tests.
 - [ ] 1.4 Ratings and XMP sidecars, moved from Photomatch: the ratings model, and the sidecar rules of Photomatch's record 0014. What stays as Photomatch's own store is decided here. A test that a sidecar keeps Lightroom's fields, and another app's. *Design choices; new record.*
