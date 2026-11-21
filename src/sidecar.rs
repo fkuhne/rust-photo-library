@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
-use xmp_toolkit::{FromStrOptions, ToStringOptions, XmpDateTime, XmpMeta, XmpValue, xmp_ns};
+use xmp_toolkit::{FromStrOptions, ToStringOptions, XmpDateTime, XmpMeta, XmpValue, xmp_gps, xmp_ns};
 
 use crate::files::write_durably;
-use crate::photo::has_extension;
+use crate::photo::{has_extension, Position};
 use crate::ratings::{Label, Pick, Rating};
 use crate::raw;
 
@@ -70,6 +70,20 @@ pub fn stamp(path: &Path) -> Option<Stamp> {
     let meta = std::fs::metadata(path).ok()?;
     let modified = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
     Some(Stamp { modified_ms: modified.as_millis() as u64, len: meta.len() })
+}
+
+/// The position set in the sidecar of `photo`, as Lightroom Classic's Map module sets one:
+/// `exif:GPSLatitude` and `exif:GPSLongitude`, as `DDD,MM,SSk` or `DDD,MM.mmk` (record 0010).
+/// None when the photo gets no sidecar, or it isn't there, or holds no position. Read fresh each
+/// time, as another app may set it.
+pub fn position(photo: &Path) -> Option<Position> {
+    if !has_sidecar(photo) {
+        return None;
+    }
+    let meta = parse(&path_for(photo)).ok()??;
+    let latitude = xmp_gps::exif_latitude_to_decimal(&meta.property(xmp_ns::EXIF, "GPSLatitude")?.value)?;
+    let longitude = xmp_gps::exif_longitude_to_decimal(&meta.property(xmp_ns::EXIF, "GPSLongitude")?.value)?;
+    Position::new(latitude, longitude)
 }
 
 /// What the sidecar at `path` says. A field it doesn't hold reads as none: no stars, unpicked,
@@ -286,6 +300,33 @@ mod tests {
             std::fs::write(&path, sidecar(fields)).unwrap();
             assert_eq!(read(&path).unwrap(), expected, "{fields}");
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A sidecar with a position, as Lightroom Classic's Map module writes one: `DDD,MM.mmk`.
+    const POSITIONED: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    exif:GPSLatitude="37,48.4902N"
+    exif:GPSLongitude="122,28.5432W"/>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+    /// A position set in a sidecar reads, and stays when a rating is written beside it (record 0010).
+    #[test]
+    fn a_position_set_in_a_sidecar_reads_and_stays_through_a_rating() {
+        let dir = folder("position");
+        let photo = dir.join("DSC5.ARW");
+        std::fs::write(&photo, b"x").unwrap();
+        assert_eq!(position(&photo), None, "no sidecar yet");
+        std::fs::write(dir.join("DSC5.xmp"), POSITIONED).unwrap();
+        let at = position(&photo).expect("a position");
+        assert!((at.latitude - 37.80817).abs() < 1e-4 && (at.longitude + 122.47572).abs() < 1e-4, "{at:?}");
+        write(&path_for(&photo), Rating { pick: Pick::Picked, stars: 3, label: Label::Red }).unwrap();
+        assert_eq!(position(&photo), Some(at), "kept through a rating");
+        std::fs::write(dir.join("L5.xmp"), POSITIONED).unwrap();
+        assert_eq!(position(&dir.join("L5.DNG")), None, "a DNG gets no sidecar");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

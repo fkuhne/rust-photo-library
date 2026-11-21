@@ -10,7 +10,7 @@ use image::{ImageFormat, ImageReader};
 
 use crate::os_image;
 use crate::problem::Problem;
-use crate::photo::{has_extension, Orientation, Photo, PhotoInfo, PhotoReader, Preview, Want};
+use crate::photo::{has_extension, Orientation, Photo, PhotoInfo, PhotoReader, Position, Preview, Want, DETAILS_VERSION};
 use crate::thumbs;
 
 const FORMATS: &[(&str, ImageFormat)] = &[
@@ -42,12 +42,16 @@ pub fn is_image(path: &Path) -> bool {
 pub struct ImageFileReader;
 
 impl PhotoReader for ImageFileReader {
-    fn read(&self, path: &Path, _: Want) -> Result<Photo, Problem> {
+    fn read(&self, path: &Path, want: Want) -> Result<Photo, Problem> {
         let bytes = std::fs::read(path).map_err(|e| Problem::reading(path, e))?;
         // Many files hold no EXIF: a PNG from an editor, a screenshot. Their details stay empty.
         let exif = exif::Reader::new().read_from_container(&mut Cursor::new(&bytes)).ok();
         let exif = exif.as_ref();
         let info = details(exif);
+        // Only the details, without decoding anything: their sizes stay as cached (record 0010).
+        if want == Want::Details {
+            return Ok(Photo { previews: Vec::new(), no_preview: None, orientation: Orientation::Normal, info });
+        }
         if has_extension(path, OS_DECODED) {
             return Ok(read_with_os(&bytes, info));
         }
@@ -107,8 +111,24 @@ fn details(exif: Option<&Exif>) -> PhotoInfo {
         shutter_seconds: exif.and_then(|e| rational(e, Tag::ExposureTime)).unwrap_or(0.0),
         aperture: exif.and_then(|e| rational(e, Tag::FNumber)).unwrap_or(0.0),
         focal_length_mm: exif.and_then(|e| rational(e, Tag::FocalLength)).unwrap_or(0.0),
+        position: exif.and_then(position),
+        details_version: DETAILS_VERSION,
         ..PhotoInfo::default()
     }
+}
+
+/// Where the EXIF says the photo was taken: degrees, minutes and seconds, south and west by their
+/// references; none without both, or with a part unknown, as 0/0 (record 0010).
+fn position(exif: &Exif) -> Option<Position> {
+    let coordinate = |tag: Tag, reference: Tag, negative: &str| -> Option<f64> {
+        let Value::Rational(parts) = &exif.get_field(tag, In::PRIMARY)?.value else { return None };
+        if parts.len() < 3 || parts.iter().take(3).any(|r| r.denom == 0) {
+            return None;
+        }
+        let value = parts[0].to_f64() + parts[1].to_f64() / 60.0 + parts[2].to_f64() / 3600.0;
+        Some(if text(exif, reference).is_some_and(|r| r.eq_ignore_ascii_case(negative)) { -value } else { value })
+    };
+    Position::new(coordinate(Tag::GPSLatitude, Tag::GPSLatitudeRef, "S")?, coordinate(Tag::GPSLongitude, Tag::GPSLongitudeRef, "W")?)
 }
 
 fn text(exif: &Exif, tag: Tag) -> Option<String> {

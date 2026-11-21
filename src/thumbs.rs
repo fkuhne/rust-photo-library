@@ -13,7 +13,7 @@ use image::{DynamicImage, ImageFormat};
 use serde::Serialize;
 
 use crate::files::write_atomically;
-use crate::photo::{Orientation, Photo, PhotoInfo, PhotoReader, Preview, Want};
+use crate::photo::{Orientation, Photo, PhotoInfo, PhotoReader, Preview, Want, DETAILS_VERSION};
 use crate::problem::Problem;
 
 /// The long side of a thumbnail, in pixels: sharp in rows up to 267 points high for a 3:2 photo
@@ -108,7 +108,25 @@ impl ThumbCache {
     pub fn info(&self, reader: &dyn PhotoReader, path: &Path) -> Result<PhotoInfo, Problem> {
         let key = cache_key(path)?;
         let _turn = self.turn(key.clone())?;
-        if let Some(info) = std::fs::read(self.dir.join(format!("{key}.json"))).ok().and_then(|b| serde_json::from_slice(&b).ok()) {
+        if let Some(cached) = std::fs::read(self.dir.join(format!("{key}.json"))).ok().and_then(|b| serde_json::from_slice::<PhotoInfo>(&b).ok()) {
+            if cached.details_version >= DETAILS_VERSION {
+                return Ok(cached);
+            }
+            // Cached before what the details hold grew: they're read again, without a preview,
+            // and the sizes and the thumbnail kept (record 0010). If the file can't be read now,
+            // the details stay as they were.
+            let Ok(photo) = reader.read(path, Want::Details) else { return Ok(cached) };
+            let info = PhotoInfo {
+                width: cached.width,
+                height: cached.height,
+                preview_width: cached.preview_width,
+                preview_height: cached.preview_height,
+                thumb_width: cached.thumb_width,
+                thumb_height: cached.thumb_height,
+                no_preview: cached.no_preview,
+                ..photo.info
+            };
+            self.keep(&format!("{key}.json"), &serde_json::to_vec(&info).map_err(|e| e.to_string())?);
             return Ok(info);
         }
         Ok(self.make(reader, path, &key)?.1)
@@ -493,6 +511,42 @@ mod tests {
         assert!(cache.thumbnail(&GreyPhoto, &photo).is_ok(), "the photo still shows");
         assert!(cache.info(&GreyPhoto, &photo).is_ok());
         assert!(dir.join("thumbnails").is_dir(), "and the folder is made again");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A photo with a position, which only its details are read for.
+    struct PlacedPhoto;
+
+    impl PhotoReader for PlacedPhoto {
+        fn read(&self, _: &Path, want: Want) -> Result<Photo, Problem> {
+            assert_eq!(want, Want::Details, "only the details are read again");
+            let info = PhotoInfo { position: crate::photo::Position::new(37.8, -122.5), details_version: DETAILS_VERSION, width: 9, ..PhotoInfo::default() };
+            Ok(Photo { previews: Vec::new(), no_preview: None, orientation: Orientation::Normal, info })
+        }
+    }
+
+    /// Details cached before the position are read again once, without a preview; the thumbnail
+    /// and the sizes stay (record 0010).
+    #[test]
+    fn details_cached_before_the_position_are_read_again_the_thumbnail_kept() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-version-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("a.ARW");
+        std::fs::write(&photo, b"a photo").unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        // As an older version cached them: version 0, no position.
+        let old = cache.info(&GreyPhoto, &photo).unwrap();
+        assert_eq!((old.details_version, old.position), (0, None));
+        let thumbnail = cache.thumbnail(&GreyPhoto, &photo).unwrap();
+
+        let info = cache.info(&PlacedPhoto, &photo).unwrap();
+        assert_eq!(info.position, crate::photo::Position::new(37.8, -122.5));
+        assert_eq!(info.details_version, DETAILS_VERSION);
+        assert_eq!((info.thumb_width, info.thumb_height, info.width), (old.thumb_width, old.thumb_height, old.width), "the sizes kept");
+        assert_eq!(cache.thumbnail(&PlacedPhoto, &photo).unwrap(), thumbnail, "the thumbnail kept, not made again");
+        // Read again once: now as cached, GreyPhoto not asked.
+        assert_eq!(cache.info(&GreyPhoto, &photo).unwrap().position, info.position);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -71,6 +71,26 @@ impl Orientation {
     }
 }
 
+/// Where a photo was taken, in degrees, north and east positive (record 0010).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Position {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+impl Position {
+    /// A position, if it is one: within range, and not 0 and 0, which an empty GPS block gives,
+    /// as several cameras write one.
+    pub fn new(latitude: f64, longitude: f64) -> Option<Position> {
+        let valid = latitude.is_finite() && longitude.is_finite() && latitude.abs() <= 90.0 && longitude.abs() <= 180.0;
+        (valid && (latitude != 0.0 || longitude != 0.0)).then_some(Position { latitude, longitude })
+    }
+}
+
+/// What `PhotoInfo` holds, by version: details cached at an older one are read again, the
+/// thumbnail kept (record 0010). 1: the position.
+pub const DETAILS_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhotoInfo {
@@ -98,6 +118,13 @@ pub struct PhotoInfo {
     /// Why the photo can't be shown, when its details could be read but no thumbnail made.
     #[serde(default)]
     pub no_preview: Option<Problem>,
+    /// Where it was taken, from the file's GPS; an app may look in its sidecar too,
+    /// `sidecar::position` (record 0010).
+    #[serde(default)]
+    pub position: Option<Position>,
+    /// `DETAILS_VERSION` when the details were read; 0 for those cached before it.
+    #[serde(default)]
+    pub details_version: u32,
 }
 
 /// What a read is for, so that a RAW file's reader takes out only the preview it needs, not all
@@ -114,6 +141,9 @@ pub enum Want {
     /// The photo at its full resolution, for zooming in: the largest preview if it's about the
     /// photo's own size, or else the RAW data developed at full size (plan step 2.26).
     Full,
+    /// No preview, only the details: to read again details cached before what they hold grew,
+    /// the thumbnail kept (record 0010).
+    Details,
 }
 
 pub trait PhotoReader: Send + Sync {
@@ -183,5 +213,16 @@ mod tests {
                 ("/b/DSC1.jpeg".into(), None),
             ]
         );
+    }
+
+    /// An empty GPS block's 0 and 0, and values out of range, aren't a position (record 0010).
+    #[test]
+    fn only_a_real_position_is_one() {
+        assert_eq!(Position::new(37.8, -122.5), Some(Position { latitude: 37.8, longitude: -122.5 }));
+        assert_eq!(Position::new(0.0, 0.0), None);
+        assert_eq!(Position::new(91.0, 10.0), None);
+        assert_eq!(Position::new(10.0, -181.0), None);
+        assert_eq!(Position::new(f64::NAN, 10.0), None);
+        assert!(Position::new(0.0, 10.0).is_some(), "on the equator");
     }
 }

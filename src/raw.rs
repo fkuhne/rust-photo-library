@@ -4,7 +4,7 @@ use std::path::Path;
 
 use image::ImageFormat;
 
-use crate::photo::{has_extension, Orientation, Photo, PhotoInfo, PhotoReader, Preview, Want};
+use crate::photo::{has_extension, Orientation, Photo, PhotoInfo, PhotoReader, Position, Preview, Want, DETAILS_VERSION};
 use crate::problem::Problem;
 use crate::thumbs;
 
@@ -94,6 +94,7 @@ fn take_preview(raw: &mut rsraw::RawImage, want: Want) -> Option<Preview> {
             Want::Largest | Want::Full => candidates.len() - 1,
             // The smallest of a size LibRaw knows: one listed as 0 × 0 may be the largest.
             Want::Smallest => candidates.iter().position(|&(_, width, height)| width > 0 && height > 0).unwrap_or(0),
+            Want::Details => return None,
         };
         let (index, ..) = candidates.remove(at);
         let already = taken.iter().position(|(i, _)| *i == index).map(|at| taken.swap_remove(at).1);
@@ -154,6 +155,8 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
         thumb_width: 0,
         thumb_height: 0,
         no_preview: None,
+        position: position(&data.other.parsed_gps),
+        details_version: DETAILS_VERSION,
     };
 
     // No JPEG preview to show, as with the Canon R5 Mark II's HEIF ones (finding 6 in
@@ -169,7 +172,8 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
     let full_size = |p: &Preview| p.width.max(p.height) as u64 * 10 >= width.max(height) as u64 * 9;
     let mut no_preview = None;
     let small = previews.last().is_some_and(|p| too_small(p.width, p.height, want));
-    if previews.is_empty() || always_develop || (full && !previews.iter().any(full_size)) || small {
+    let develop_now = previews.is_empty() || always_develop || (full && !previews.iter().any(full_size)) || small;
+    if want != Want::Details && develop_now {
         if knows_colours(&raw) {
             // A photo developed at full size takes its tones from the camera's own preview, so
             // zooming in shows more detail, not another look (plan step 2.26).
@@ -191,6 +195,17 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
     };
 
     Ok(Photo { previews, no_preview, orientation, info })
+}
+
+/// Where LibRaw says the photo was taken: degrees, minutes and seconds, south and west by their
+/// references; none if it parsed no GPS, or an empty block (record 0010).
+fn position(gps: &rsraw_sys::libraw_gps_info_t) -> Option<Position> {
+    if gps.gpsparsed == 0 {
+        return None;
+    }
+    let degrees = |v: [f32; 3]| v[0] as f64 + v[1] as f64 / 60.0 + v[2] as f64 / 3600.0;
+    let sign = |reference: std::ffi::c_char, negative: u8| if reference as u8 == negative { -1.0 } else { 1.0 };
+    Position::new(sign(gps.latref, b'S') * degrees(gps.latitude), sign(gps.longref, b'W') * degrees(gps.longitude))
 }
 
 /// The long side under which a preview is too small for the large view, if it's under half the
