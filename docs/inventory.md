@@ -119,6 +119,8 @@ What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`
 
 Every one allows MIT or Apache 2.0 publishing and closed use.
 
+The feature `places` (record 0010) adds no package: `flate2` 1.1.10, MIT or Apache 2.0, is in the build already, through `png` and `tiff`. It builds in `data/places.tsv.gz`, GeoNames' towns of over 1,000 people, regions and countries, of 2026-11-21, under CC BY 4.0, which allows a closed, paid app to use it with credit; the list is cut to six columns, which the credit says. An app with the feature credits GeoNames: "Place names from GeoNames (geonames.org), under CC BY 4.0 (creativecommons.org/licenses/by/4.0), cut to the columns a lookup needs."
+
 Step 1.4 adds `xmp_toolkit` 1.12.1, MIT or Apache 2.0, which builds Adobe's XMP Toolkit, BSD 3-Clause, with expat and zlib (PhotoMatch's `docs/licences.md`), and 14 more packages for it, among them `thiserror`, `num_enum`, `fs_extra` and `toml_edit`: each MIT, Apache 2.0 or BSD 3-Clause, from `cargo metadata` on 2026-11-21; 123 packages from crates.io in all, every one at PhotoMatch's version.
 
 Step 1.3 adds `walkdir` 2.5.0 and `same-file` 1.0.6, both Unlicense or MIT, and on Windows `winapi-util` 0.1.11, Unlicense or MIT, and `windows-sys` 0.61.2, MIT or Apache 2.0: 109 packages from crates.io in all, from `cargo metadata` on 2026-11-21, at PhotoMatch's versions.
@@ -142,6 +144,8 @@ What an app needs, as of step 1.4:
 - **PhotoMatch** is on the library since 2026-11-21, at `9e1b65d` (its commit `251ea86`, its record 0038), the library's `folder::list` in place of its own `list`: the same walk and report, hidden files and folders left out. Every name in PhotoDev's list of 2026-11-20 is public, which [`tests/public_api.rs`](../tests/public_api.rs) checks.
 - **To build:** the library by git at a commit, nothing else of LibRaw's: Cargo fetches its submodule with it (the Cargo book). And on the machine, a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
 - **A `match` on `Problem`** gets a wildcard arm.
+- **A photo's position** ([0010](../spec/decisions/0010-a-photo-s-position-and-its-place-named-offline-from-geonames.md)), from its file: `PhotoInfo::position`; from its sidecar, read fresh: `sidecar::position(photo)`. `Want` has a fifth way, `Details`, so a `match` on it needs its arm. Details cached before it are read again once, without a preview; `PhotoInfo::details_version` says which.
+- **Its place,** with the feature `places`: `places::place_of(position)`, a `Place` with its town, region and country, in English. The list takes about 10 MB of memory once read, in 61 to 74 ms on the planning Mac, a lookup 3 to 50 µs after. An app with it credits GeoNames (the licences, above).
 
 ## Open questions
 

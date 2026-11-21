@@ -26,8 +26,21 @@ blake3 = "1.8.7"
 walkdir = "2.5.0"
 xmp_toolkit = "1.12.1"
 
+# For the feature `places`: reading the place list built in. The version `png` and `tiff` bring
+# already (record 0010).
+flate2 = { version = "1.1.10", optional = true }
+
+[features]
+# A position named by its town, region and country, offline, from GeoNames' towns (record 0010):
+# about 2.7 MB of data, which an app that doesn't name places leaves out.
+places = ["dep:flate2"]
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Imaging", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
+
+[[example]]
+name = "place_of"
+required-features = ["places"]
 
 [workspace]
 members = ["vendor/rsraw", "vendor/rsraw-sys"]

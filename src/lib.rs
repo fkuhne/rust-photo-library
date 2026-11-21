@@ -23,6 +23,9 @@ pub mod os_image;
 pub mod photo;
 /// Problems as kinds, for the apps' interfaces to word (PhotoMatch's record 0022).
 pub mod problem;
+/// A position named by its town, region and country, offline, from GeoNames (record 0010).
+#[cfg(feature = "places")]
+pub mod places;
 /// Picks, stars and colour labels: the model, and each app's store of them, kept in step with the
 /// sidecars, the newer change winning (PhotoMatch's record 0014, the library's record 0008).
 pub mod ratings;

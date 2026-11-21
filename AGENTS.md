@@ -53,6 +53,9 @@ git submodule update --init      # once, after cloning: LibRaw
 cargo test                       # build, LibRaw included, and run the tests: the moved ones, and tests/public_api.rs, the names the apps use
 cargo build --release            # the library alone
 cargo run --example list_folder -- <folder>   # a folder's photos as the library lists them
+cargo test --features places     # the tests of the place names too (record 0010)
+cargo run --release --features places --example place_of -- <folder>   # where each photo was taken, named
+python3 -I scripts/places-data.py <folder> data/places.tsv.gz   # the place list again, from GeoNames' files in <folder>
 ```
 
 ## Conventions
