@@ -269,6 +269,107 @@ impl RawImage {
         Error::check(result)?;
         Ok(unsafe { ProcessedImage::from_raw(processed) })
     }
+
+    // ---- Added for PhotoDev (plan step 1.2, record 0011): LibRaw's processing options, and its
+    // ---- processing and TIFF writer as separate calls, so that each stage can be timed.
+
+    /// The output colour space, LibRaw's `output_color`: 0 raw, 1 sRGB, 2 Adobe RGB, 3 Wide,
+    /// 4 ProPhoto, 5 XYZ, 6 ACES, 7 DCI-P3, 8 Rec. 2020. (PhotoDev.)
+    pub fn set_output_color(&mut self, space: i32) {
+        unsafe { sys::libraw_set_output_color(self.raw_data, space) }
+    }
+
+    /// Bits a channel in the output, 8 or 16. (PhotoDev.)
+    pub fn set_output_bps(&mut self, bits: i32) {
+        unsafe { sys::libraw_set_output_bps(self.raw_data, bits) }
+    }
+
+    /// The output's transfer curve, LibRaw's `gamm[0]` and `gamm[1]`: the inverted power and
+    /// the toe's slope. sRGB's is 1/2.4 and 12.92. (PhotoDev.)
+    pub fn set_gamma(&mut self, inverted_power: f32, toe_slope: f32) {
+        unsafe {
+            sys::libraw_set_gamma(self.raw_data, 0, inverted_power);
+            sys::libraw_set_gamma(self.raw_data, 1, toe_slope);
+        }
+    }
+
+    /// Turns LibRaw's automatic brightening by histogram off (`true`) or on. (PhotoDev.)
+    pub fn set_no_auto_bright(&mut self, off: bool) {
+        unsafe { sys::libraw_set_no_auto_bright(self.raw_data, off as i32) }
+    }
+
+    /// The highlight mode: 0 clip, 1 unclip, 2 blend, 3 to 9 rebuild. (PhotoDev.)
+    pub fn set_highlight(&mut self, mode: i32) {
+        unsafe { sys::libraw_set_highlight(self.raw_data, mode) }
+    }
+
+    /// The demosaic, LibRaw's `user_qual`: 0 linear, 1 VNG, 2 PPG, 3 AHD, 4 DCB, 11 DHT,
+    /// 12 modified AHD. (PhotoDev.)
+    pub fn set_demosaic(&mut self, method: i32) {
+        unsafe { sys::libraw_set_demosaic(self.raw_data, method) }
+    }
+
+    /// Develops the unpacked image with LibRaw's own processing, `dcraw_process`, with the
+    /// options set above. (PhotoDev.)
+    pub fn dcraw_process(&mut self) -> Result<()> {
+        Error::check(unsafe { sys::libraw_dcraw_process(self.raw_data) })
+    }
+
+    /// The developed image's width and height, after `dcraw_process`, turned as the camera
+    /// says, as LibRaw's own `get_mem_image_format` works them out. (PhotoDev.)
+    pub fn output_size(&self) -> (u32, u32) {
+        let sizes = &self.as_ref().sizes;
+        let (width, height) = (sizes.width as u32, sizes.height as u32);
+        if sizes.flip & 4 != 0 { (height, width) } else { (width, height) }
+    }
+
+    /// Writes the developed image as a TIFF, with LibRaw's own writer, which embeds the output
+    /// space's ICC profile. The path must be valid UTF-8; on Windows, LibRaw takes it as a
+    /// narrow string, so letters outside ASCII may fail. (PhotoDev.)
+    pub fn write_tiff(&mut self, path: &std::path::Path) -> Result<()> {
+        let path = path.to_str().ok_or(Error::Io)?;
+        let path = std::ffi::CString::new(path).map_err(|_| Error::Io)?;
+        unsafe { sys::libraw_set_output_tif(self.raw_data, 1) };
+        Error::check(unsafe { sys::libraw_dcraw_ppm_tiff_writer(self.raw_data, path.as_ptr()) })
+    }
+
+    /// The camera's colour data, once opened: the multipliers as shot (`cam_mul`), daylight's
+    /// (`pre_mul`), and the matrix from XYZ to the camera's RGB (`cam_xyz`), as LibRaw gives
+    /// them. (PhotoDev, plan step 1.5.)
+    pub fn color_data(&self) -> ([f32; 4], [f32; 4], [[f32; 3]; 4]) {
+        let color = &self.as_ref().color;
+        (color.cam_mul, color.pre_mul, color.cam_xyz)
+    }
+
+    /// A DNG's BaselineExposure, in stops, if the file has one: what its maker asks a converter
+    /// to add before rendering. LibRaw marks a file without one with -999. (PhotoDev, plan step
+    /// 1.5.)
+    pub fn dng_baseline_exposure(&self) -> Option<f32> {
+        let value = self.as_ref().color.dng_levels.baseline_exposure;
+        (value > -998.0).then_some(value)
+    }
+
+    /// The decoder LibRaw picked for the file, once opened, and whether it can decode with it:
+    /// some it names but can't, such as Nikon's High Efficiency NEFs, `nikon_he_load_raw()`.
+    /// (PhotoDev, plan step 2.1.)
+    pub fn decoder(&mut self) -> Option<(String, bool)> {
+        let mut info = sys::libraw_decoder_info_t { decoder_name: std::ptr::null(), decoder_flags: 0 };
+        if unsafe { sys::libraw_get_decoder_info(self.raw_data, &mut info) } != 0 {
+            return None;
+        }
+        let name = if info.decoder_name.is_null() {
+            String::new()
+        } else {
+            unsafe { std::ffi::CStr::from_ptr(info.decoder_name) }.to_string_lossy().into_owned()
+        };
+        let unsupported = info.decoder_flags & sys::LibRaw_decoder_flags_LIBRAW_DECODER_UNSUPPORTED_FORMAT as u32 != 0;
+        Some((name, !unsupported))
+    }
+
+    /// LibRaw's version, such as "0.22.3-Release". (PhotoDev.)
+    pub fn libraw_version() -> String {
+        unsafe { std::ffi::CStr::from_ptr(sys::libraw_version()) }.to_string_lossy().into_owned()
+    }
 }
 
 impl Drop for RawImage {

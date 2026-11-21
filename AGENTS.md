@@ -50,7 +50,7 @@ The workspace is the crate `photo-library` at the root, and the vendored `rsraw`
 
 ```sh
 git submodule update --init      # once, after cloning: LibRaw
-cargo test                       # build, LibRaw included, and run the tests
+cargo test                       # build, LibRaw included, and run the tests: the moved ones, and tests/public_api.rs, the names the apps use
 cargo build --release            # the library alone
 ```
 
@@ -58,7 +58,7 @@ cargo build --release            # the library alone
 
 - **English everywhere:** code, notes, records.
 - **Resources are stated, not assumed.** Each step says what it needs: memory, disk, time and money. Each measurement names the machine it ran on.
-- **Pin dependencies to exact versions,** with a lockfile.
+- **Dependencies at the versions the apps build with,** as default requirements, and the lockfile committed for the library's own builds and tests: a library's lockfile doesn't reach the apps, whose own lockfiles pin what they build ([0006](spec/decisions/0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md)).
 - **Nothing large in git.** Photos and test files stay out of it: the tests read the apps' test RAWs from outside, as PhotoDev's do (`PHOTODEV_TEST_RAWS`). Report disk use after a step that writes data.
 - **No money is spent without a record:** hardware, rented compute and paid APIs.
 - **The planning machine is where it's built and tested,** for now: the owner's Mac. GitHub's minutes cost the owner money, and its credits are spent: start no workflow without the owner's word.

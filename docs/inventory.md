@@ -82,7 +82,7 @@ Both are copies of `rsraw` 0.1.1 and `rsraw-sys` 0.1.1 (MIT, `hexilee/rsraw`), w
   - `color_data`, `dng_baseline_exposure`, `decoder` and `libraw_version`.
 
   Its plan steps 1.2 to 2.1.
-- **PhotoDev's copy holds PhotoMatch's additions too,** as it was copied from PhotoMatch's. So the merged `rsraw` is PhotoDev's, with each addition marked by whose it was.
+- **PhotoDev's copy holds PhotoMatch's additions too,** as it was copied from PhotoMatch's, but from its commit `c12880a`, older than the rest of PhotoDev's copy: it lacks PhotoMatch's `open_file` on Windows (its record 0031). So the merged `rsraw` is PhotoMatch's, at its commit `391fd74`, with PhotoDev's block of eleven functions taken in from its commit `d95ff89`, each addition marked by whose it was (step 1.2). Otherwise the two differed only by comments.
 - **`rsraw-sys`:** the two build scripts and manifests differ by 6 lines, PhotoDev's header comment.
 
 ## PhotoBook's photo module
@@ -118,6 +118,23 @@ What plan step 1.1 builds: `photo-library`, the vendored `rsraw` and `rsraw-sys`
 - **MIT, Apache 2.0, or LGPL 2.1 or later:** `r-efi` 6.0.0, a dependency of `getrandom` for UEFI targets, used under MIT or Apache 2.0.
 
 Every one allows MIT or Apache 2.0 publishing and closed use.
+
+## What moved, and what changed on the way
+
+Plan step 1.2, on 2026-11-21, from PhotoMatch's commit `391fd74`: `photo.rs`, `raw.rs`, `image_file.rs`, `os_image.rs`, `thumbs.rs`, `problem.rs`, and `files.rs` with them, as `thumbs.rs` writes its files through it. Each moved as it was, with its tests, but for these, each marked in the code:
+- **`Problem` is `#[non_exhaustive]`** ([0005](../spec/decisions/0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md)): an app's `match` on it needs a wildcard arm.
+- **`thumbs::upright`, `thumbs::decode` and `thumbs::encode` are public:** PhotoDev uses them, and could only because its copy was inside its own crate. In PhotoMatch they were the crate's own.
+- **`rsraw` and `rsraw_sys` are re-exported** at the crate's root, so an app reaches the library's own copy and needs no dependency of its own on them. Rust's API guidelines say a dependency whose types a crate's public API uses is part of that API (C-STABLE); they say nothing of re-exporting, so this is the library's choice.
+- **The dependencies** came in at PhotoMatch's versions ([0006](../spec/decisions/0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md)).
+
+The thumbnail cache's format, `CACHE_VERSION` included, and `Problem`'s kinds and their JSON are unchanged.
+
+## For the apps
+
+What an app needs, as of step 1.2:
+- **The modules are PhotoMatch's,** under the crate's name: `photo_library::photo`, `::raw`, `::image_file`, `::os_image`, `::thumbs`, `::problem`, `::files`, and `photo_library::rsraw` for LibRaw. Every name in PhotoDev's list of 2026-11-20 is public, which [`tests/public_api.rs`](../tests/public_api.rs) checks.
+- **To build:** the library by git at a commit, nothing else of LibRaw's: Cargo fetches its submodule with it (the Cargo book). And on the machine, a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
+- **A `match` on `Problem`** gets a wildcard arm.
 
 ## Open questions
 

@@ -11,9 +11,21 @@ repository = "https://github.com/fkuhne/rust-photo-library"
 # Private for now (record 0003): never published by mistake.
 publish = false
 
+# The versions PhotoMatch builds with, as default requirements: a library's Cargo.lock doesn't
+# reach the apps, each app's own lockfile pins what it builds, and an exact `=` here could make
+# an app's dependencies unresolvable (record 0006).
 [dependencies]
 rsraw = { path = "vendor/rsraw" }
 rsraw-sys = { path = "vendor/rsraw-sys" }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "tiff", "bmp", "gif"] }
+jpeg-decoder = { version = "0.3.2", default-features = false }
+kamadak-exif = "0.6.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+blake3 = "1.8.7"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Imaging", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
 
 [workspace]
 members = ["vendor/rsraw", "vendor/rsraw-sys"]
