@@ -17,7 +17,9 @@ The work, as small steps in order. Each step names the decision records it depen
 ## Phase 0: The spec
 
 - [x] 0.1 The product spec, the requirements, this plan and the first records ([0001](decisions/0001-work-from-a-spec-and-record-every-decision.md) to [0004](decisions/0004-photomatch-s-code-as-it-is-is-the-starting-point.md)). Also a first pass of the inventory, [`docs/inventory.md`](../docs/inventory.md).
-- [ ] 0.2 The owner reviews the spec, the records and the inventory, and the first commit is made. The private GitHub repository `rust-photo-library` too, at the owner's word.
+- [x] 0.2 The owner reviews the spec, the records and the inventory, and the first commit is made. The private GitHub repository `rust-photo-library` too, at the owner's word.
+
+  Done on 2026-11-20: reviewed with the owner, who kept the crate's name `photo-library` and the repository's `rust-photo-library`, as Rust's API guidelines ask; the review's notes went into the inventory and step 2.1; first commit `846ce26`. The GitHub repository waits for the owner's word.
 
 ## Phase 1: The library
 
