@@ -1,0 +1,26 @@
+.env
+.DS_Store
+
+# The app's builds and packages, from plan step 1.1.
+node_modules/
+dist/
+target/
+
+# Photos, exports and test renders never go in git.
+*.ARW
+*.CR2
+*.CR3
+*.NEF
+*.RAF
+*.ORF
+*.RW2
+*.PEF
+*.DNG
+*.dng
+*.tif
+*.tiff
+renders/
+exports/
+
+# The test RAWs CI fetches (record 0014).
+.test-raws/
