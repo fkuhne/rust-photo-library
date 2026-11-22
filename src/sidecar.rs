@@ -3,6 +3,7 @@
 //! Only the pick, the stars and the label are ours. Everything else a sidecar holds, such as
 //! Lightroom's edits, is kept as it is. A sidecar PhotoMatch can't read is never written over.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -11,7 +12,7 @@ use xmp_toolkit::{FromStrOptions, ToStringOptions, XmpDateTime, XmpMeta, XmpValu
 
 use crate::files::write_durably;
 use crate::photo::{has_extension, Position};
-use crate::ratings::{Label, Pick, Rating};
+use crate::ratings::{tag_from, tidy, Label, Pick, Rating};
 use crate::raw;
 
 /// Where Lightroom Classic 13.2 and later keep their flags (`pick` and `good`).
@@ -86,10 +87,31 @@ pub fn position(photo: &Path) -> Option<Position> {
     Position::new(latitude, longitude)
 }
 
+/// Lightroom Classic's namespace, for `lr:hierarchicalSubject` (exiftool's `XMP.pm`; record 0012).
+const LIGHTROOM: &str = "http://ns.adobe.com/lightroom/1.0/";
+
 /// What the sidecar at `path` says. A field it doesn't hold reads as none: no stars, unpicked,
 /// no label, as Lightroom leaves out what isn't set.
 pub fn read(path: &Path) -> Result<Rating, SidecarError> {
+    read_with_tags(path).map(|(rating, _)| rating)
+}
+
+/// What the sidecar at `path` says, the tags its keywords make with it (record 0012): each path
+/// in `lr:hierarchicalSubject`, its levels between `|`, a tag; each keyword in `dc:subject` that
+/// isn't a path or a level of one, as an app writing only `dc:subject` leaves them, a tag too.
+pub fn read_with_tags(path: &Path) -> Result<(Rating, Vec<String>), SidecarError> {
     let meta = parse(path)?.ok_or_else(|| format!("{} isn't there", path.display()))?;
+    Ok((rating_of(&meta), tags_of(&meta)))
+}
+
+fn tags_of(meta: &XmpMeta) -> Vec<String> {
+    let paths: Vec<String> = meta.property_array(LIGHTROOM, "hierarchicalSubject").filter_map(|item| tag_from(&item.value)).collect();
+    let known: HashSet<String> = paths.iter().flat_map(|path| std::iter::once(path.clone()).chain(path.split(" > ").map(str::to_string))).map(|t| t.to_lowercase()).collect();
+    let words = meta.property_array(xmp_ns::DC, "subject").filter_map(|item| tag_from(&item.value)).filter(|word| !known.contains(&word.to_lowercase()));
+    tidy(paths.into_iter().chain(words).collect())
+}
+
+fn rating_of(meta: &XmpMeta) -> Rating {
     let text = |ns: &str, name: &str| meta.property(ns, name).map(|v| v.value.trim().to_lowercase());
     let xmp_rating: i32 = text(xmp_ns::XMP, "Rating").and_then(|r| r.parse::<f32>().ok()).map_or(0, |r| r.round() as i32);
     let pick = match (text(XMP_DM, "pick").as_deref(), text(XMP_DM, "good").as_deref()) {
@@ -103,12 +125,14 @@ pub fn read(path: &Path) -> Result<Rating, SidecarError> {
         _ => Pick::Unpicked,
     };
     let label = text(xmp_ns::XMP, "Label").and_then(|l| our_label(&l)).unwrap_or(Label::None);
-    Ok(Rating { pick, stars: xmp_rating.clamp(0, 5) as u8, label })
+    Rating { pick, stars: xmp_rating.clamp(0, 5) as u8, label }
 }
 
-/// Writes `rating` into the sidecar at `path`, keeping all else it holds, or makes one; and
-/// returns its stamp after.
-pub fn write(path: &Path, rating: Rating) -> Result<Stamp, SidecarError> {
+/// Writes `rating` and `tags` into the sidecar at `path`, keeping all else it holds, or makes one;
+/// and returns its stamp after. The tags as Lightroom Classic writes keywords (record 0012):
+/// each in `lr:hierarchicalSubject`, its levels between `|`, and every level in `dc:subject`;
+/// both lists written whole, so `&[]` leaves none.
+pub fn write(path: &Path, rating: Rating, tags: &[String]) -> Result<Stamp, SidecarError> {
     let mut meta = match parse(path)? {
         Some(meta) => meta,
         None => XmpMeta::new().map_err(|e| e.to_string())?,
@@ -136,6 +160,16 @@ pub fn write(path: &Path, rating: Rating) -> Result<Stamp, SidecarError> {
                 meta.delete_property(xmp_ns::XMP, "Label").map_err(failed)?;
             }
         }
+    }
+    XmpMeta::register_namespace(LIGHTROOM, "lr").map_err(failed)?;
+    meta.delete_property(LIGHTROOM, "hierarchicalSubject").map_err(failed)?;
+    meta.delete_property(xmp_ns::DC, "subject").map_err(failed)?;
+    let bag = |name: &str| XmpValue::new(name.to_string()).set_is_array(true);
+    for tag in tags {
+        meta.append_array_item(LIGHTROOM, &bag("hierarchicalSubject"), &XmpValue::new(tag.replace(" > ", "|"))).map_err(failed)?;
+    }
+    for level in tidy(tags.iter().flat_map(|tag| tag.split(" > ").map(str::to_string)).collect()) {
+        meta.append_array_item(xmp_ns::DC, &bag("subject"), &XmpValue::new(level)).map_err(failed)?;
     }
     let now = XmpDateTime::current().map_err(failed)?;
     meta.set_property_date(xmp_ns::XMP, "MetadataDate", &XmpValue::new(now)).map_err(failed)?;
@@ -211,7 +245,7 @@ mod tests {
             Rating { pick: Pick::Rejected, stars: 1, label: Label::Red },
             Rating { pick: Pick::Unpicked, stars: 0, label: Label::None },
         ] {
-            let stamp = write(&path, rating).unwrap();
+            let stamp = write(&path, rating, &[]).unwrap();
             assert_eq!(read(&path).unwrap(), rating);
             assert_eq!(Some(stamp), super::stamp(&path));
         }
@@ -226,8 +260,11 @@ mod tests {
         let path = dir.join("DSC2.xmp");
         std::fs::write(&path, LIGHTROOM).unwrap();
         assert_eq!(read(&path).unwrap(), Rating { pick: Pick::Picked, stars: 3, label: Label::None }, "Purple isn't one of ours");
+        // Its keyword is a tag, which the store takes before an app writes (record 0012).
+        let (_, tags) = read_with_tags(&path).unwrap();
+        assert_eq!(tags, ["Lisbon".to_string()]);
 
-        write(&path, Rating { pick: Pick::Rejected, stars: 5, label: Label::None }).unwrap();
+        write(&path, Rating { pick: Pick::Rejected, stars: 5, label: Label::None }, &tags).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         for kept in ["crs:Exposure2012=\"+0.35\"", "crs:Version=\"16.0\"", "<rdf:li>255, 255</rdf:li>", "<rdf:li>Lisbon</rdf:li>", "xmp:Label=\"Purple\""] {
             assert!(text.contains(kept), "{kept} is gone:\n{text}");
@@ -235,7 +272,7 @@ mod tests {
         assert!(text.contains("xmp:Rating=\"5\"") && text.contains("xmpDM:pick=\"-1\"") && text.contains("xmpDM:good=\"False\""), "{text}");
         assert!(text.contains("xmp:MetadataDate="), "{text}");
 
-        write(&path, Rating { pick: Pick::Unpicked, stars: 5, label: Label::Blue }).unwrap();
+        write(&path, Rating { pick: Pick::Unpicked, stars: 5, label: Label::Blue }, &tags).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("xmp:Label=\"Blue\"") && !text.contains("xmpDM:good"), "{text}");
         std::fs::remove_dir_all(dir).unwrap();
@@ -263,7 +300,7 @@ mod tests {
         let dir = folder("other-app");
         let path = dir.join("DSC3.xmp");
         std::fs::write(&path, OTHER_APP).unwrap();
-        write(&path, Rating { pick: Pick::Picked, stars: 2, label: Label::Green }).unwrap();
+        write(&path, Rating { pick: Pick::Picked, stars: 2, label: Label::Green }, &[]).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         for kept in ["http://example.com/otherapp/1.0/", "warmer", "<rdf:li>kept</rdf:li>"] {
             assert!(text.contains(kept), "{kept} is gone:\n{text}");
@@ -278,7 +315,7 @@ mod tests {
         let path = dir.join("DSC3.xmp");
         for damaged in ["", &LIGHTROOM[..LIGHTROOM.len() / 2], "rating=3", "\u{0}\u{1} not xml"] {
             std::fs::write(&path, damaged).unwrap();
-            assert!(write(&path, Rating { stars: 2, ..Default::default() }).is_err(), "{damaged:?}");
+            assert!(write(&path, Rating { stars: 2, ..Default::default() }, &[]).is_err(), "{damaged:?}");
             assert!(read(&path).is_err());
             assert_eq!(std::fs::read_to_string(&path).unwrap(), damaged);
         }
@@ -323,10 +360,57 @@ mod tests {
         std::fs::write(dir.join("DSC5.xmp"), POSITIONED).unwrap();
         let at = position(&photo).expect("a position");
         assert!((at.latitude - 37.80817).abs() < 1e-4 && (at.longitude + 122.47572).abs() < 1e-4, "{at:?}");
-        write(&path_for(&photo), Rating { pick: Pick::Picked, stars: 3, label: Label::Red }).unwrap();
+        write(&path_for(&photo), Rating { pick: Pick::Picked, stars: 3, label: Label::Red }, &[]).unwrap();
         assert_eq!(position(&photo), Some(at), "kept through a rating");
         std::fs::write(dir.join("L5.xmp"), POSITIONED).unwrap();
         assert_eq!(position(&dir.join("L5.DNG")), None, "a DNG gets no sidecar");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Keywords as Lightroom Classic writes them, a hierarchy and a flat one (record 0012).
+    const KEYWORDS: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:lr="http://ns.adobe.com/lightroom/1.0/">
+   <dc:subject><rdf:Bag><rdf:li>Family</rdf:li><rdf:li>Lisbon</rdf:li><rdf:li>Portugal</rdf:li><rdf:li>Travel</rdf:li></rdf:Bag></dc:subject>
+   <lr:hierarchicalSubject><rdf:Bag><rdf:li>Family</rdf:li><rdf:li>Travel|Portugal|Lisbon</rdf:li></rdf:Bag></lr:hierarchicalSubject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+    /// The keywords of an app that writes only `dc:subject`, as Capture One is reported to.
+    const FLAT_KEYWORDS: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+   <dc:subject><rdf:Bag><rdf:li>Beach</rdf:li><rdf:li>Summer 2025</rdf:li></rdf:Bag></dc:subject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+    /// Read as tags, and written back as Lightroom writes them, item for item (record 0012).
+    #[test]
+    fn keywords_read_as_tags_and_are_written_as_lightroom_writes_them() {
+        let dir = folder("keywords");
+        let path = dir.join("DSC4.xmp");
+        std::fs::write(&path, KEYWORDS).unwrap();
+        let tags = read_with_tags(&path).unwrap().1;
+        assert_eq!(tags, ["Family".to_string(), "Travel > Portugal > Lisbon".to_string()], "the levels aren't tags of their own");
+
+        let ours = ["Family".to_string(), "Travel > Portugal > Porto".to_string(), "Wedding".to_string()];
+        write(&path, Rating::default(), &ours).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for item in ["<rdf:li>Travel|Portugal|Porto</rdf:li>", "<rdf:li>Wedding</rdf:li>", "<rdf:li>Porto</rdf:li>", "<rdf:li>Portugal</rdf:li>"] {
+            assert!(text.contains(item), "{item} isn't there:\n{text}");
+        }
+        assert!(!text.contains("Lisbon"), "a keyword taken off is gone:\n{text}");
+        assert_eq!(read_with_tags(&path).unwrap().1, ours.to_vec());
+
+        write(&path, Rating::default(), &[]).unwrap();
+        assert_eq!(read_with_tags(&path).unwrap().1, Vec::<String>::new(), "and none left with no tags");
+
+        std::fs::write(&path, FLAT_KEYWORDS).unwrap();
+        assert_eq!(read_with_tags(&path).unwrap().1, ["Beach".to_string(), "Summer 2025".to_string()], "dc:subject alone");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

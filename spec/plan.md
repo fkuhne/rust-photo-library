@@ -50,4 +50,7 @@ The work, as small steps in order. Each step names the decision records it depen
 - [x] 2.5 The photographer's tags, for PhotoMatch's plan step 2.55: in the store beside the rating, with levels, added, removed and renamed.
 
   Built on 2026-11-21 ([0011](decisions/0011-the-photographer-s-tags-in-the-store-beside-the-rating.md)): 5 new tests, 48 in all with the feature `places`. PhotoMatch took it at `b9178e4`, its self-check passing on its seven folders, tags among its checks.
+- [ ] 2.6 The tags in the sidecars, for PhotoMatch's plan step 2.56: as Lightroom Classic writes keywords, both ways, the newer change winning.
+
+  Built on 2026-11-22 ([0012](decisions/0012-tags-in-the-sidecars-as-lightroom-writes-keywords-both-ways.md)): 46 tests pass, 50 with `places`. PhotoMatch takes it in its step 2.56.
 - [ ] 2.2 PhotoDev on the library: its `library` module, `folder.rs` and `vendor` removed, its `edited` flag set after the library's listing, in PhotoDev's repository, with a record there that supersedes its 0008 for this code. Its tests, self-checks and originals test pass. Flips [0003](decisions/0003-private-now-written-so-it-can-be-opened.md) to Accepted, once every licence is listed.

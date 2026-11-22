@@ -76,11 +76,13 @@ pub struct RatingChange {
     pub label: Option<Label>,
 }
 
-/// Some photos' ratings before a change and after it, in the same order, for undo.
+/// Some photos' ratings before a change and after it, in the same order, for undo; and their tags
+/// after it, which a sidecar another app changed, read on the way, may have changed (record 0012).
 #[derive(Debug, Serialize)]
 pub struct Changed {
     pub before: Vec<Rating>,
     pub after: Vec<Rating>,
+    pub tags: Vec<Vec<String>>,
 }
 
 /// What the file keeps for a photo.
@@ -104,6 +106,10 @@ struct Entry {
     /// the file when there are none, so a store from before reads as it was.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
+    /// The tags as PhotoMatch last wrote them to the sidecar's keywords or read them from there;
+    /// `None` before they went there (record 0012). Where they differ from `tags`, a write is owed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    synced_tags: Option<Vec<String>>,
 }
 
 impl Entry {
@@ -112,10 +118,15 @@ impl Entry {
         self.rating != Rating::default() || self.sidecar.is_some() || !self.tags.is_empty()
     }
 
-    /// Taken from a sidecar another app changed, the photo's tags kept: the sidecar doesn't hold
-    /// them yet (record 0011).
-    fn from_sidecar(rating: Rating, stamp: Stamp, tags: Vec<String>) -> Self {
-        Self { rating, changed_ms: stamp.modified_ms, sidecar: Some(stamp), synced: Some(rating), tags }
+    /// Taken from a sidecar another app changed: its rating, and its keywords as the tags
+    /// (record 0012). Tags of `before` that never reached the sidecar, kept before its keywords
+    /// were written, join them: the other app can't have taken off what it never saw.
+    fn from_sidecar(before: Option<&Entry>, rating: Rating, stamp: Stamp, theirs: Vec<String>) -> Self {
+        let tags = match before {
+            Some(entry) if entry.synced_tags.is_none() && !entry.tags.is_empty() => tidy(entry.tags.iter().cloned().chain(theirs.iter().cloned()).collect()),
+            _ => theirs.clone(),
+        };
+        Self { rating, changed_ms: stamp.modified_ms, sidecar: Some(stamp), synced: Some(rating), tags, synced_tags: Some(theirs) }
     }
 
     /// Whether the sidecar has another app's change that PhotoMatch hasn't seen, newer than
@@ -124,9 +135,9 @@ impl Entry {
         self.sidecar != Some(stamp) && stamp.modified_ms > self.changed_ms
     }
 
-    /// Whether PhotoMatch's rating has yet to reach the sidecar.
+    /// Whether PhotoMatch's rating, or its tags, have yet to reach the sidecar.
     fn owes_a_write(&self) -> bool {
-        self.synced.is_some_and(|synced| synced != self.rating)
+        self.synced.is_some_and(|synced| synced != self.rating) || self.tags != self.synced_tags.clone().unwrap_or_default()
     }
 }
 
@@ -153,6 +164,8 @@ pub struct Synced {
     /// The photos whose rating came from a sidecar changed by another app, by their place in
     /// the photos asked about.
     pub taken: Vec<(usize, Rating)>,
+    /// The photos whose tags came from such a sidecar's keywords, with them (record 0012).
+    pub retagged: Vec<(usize, Vec<String>)>,
     pub read: usize,
     pub written: usize,
 }
@@ -200,7 +213,7 @@ fn under(tag: &str, parent: &str) -> bool {
 }
 
 /// Sorted, letters' case aside, without repeats; the first spelling kept.
-fn tidy(tags: Vec<String>) -> Vec<String> {
+pub(crate) fn tidy(tags: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut tags: Vec<String> = tags.into_iter().filter(|tag| seen.insert(tag.to_lowercase())).collect();
     tags.sort_by_key(|tag| tag.to_lowercase());
@@ -299,50 +312,23 @@ impl Ratings {
         self.entries.lock().ok().and_then(|m| m.get(photo).map(|e| e.tags.clone())).unwrap_or_default()
     }
 
-    /// Applies `change` to the tags of `photos`, saves, and returns their tags before and after.
-    /// No sidecar is written: they don't hold tags yet (record 0011). If saving fails, nothing
+    /// Applies `change` to the tags of `photos`, saves, and returns their tags before and after;
+    /// their sidecars' keywords are written right after, in the background (record 0012). A
+    /// sidecar another app changed since the last sync is read first. If saving fails, nothing
     /// changes.
-    pub fn retag(&self, photos: &[PathBuf], change: &TagChange) -> Result<TagsChanged, Problem> {
-        self.update_tags(photos, |_, tags| retagged(change, tags))
+    pub fn retag(self: &Arc<Self>, photos: &[PathBuf], change: &TagChange) -> Result<TagsChanged, Problem> {
+        let changed = self.update_entries(photos, |_, entry| entry.tags = tidy(retagged(change, &entry.tags)))?;
+        Ok(TagsChanged { before: changed.iter().map(|(b, _)| b.tags.clone()).collect(), after: changed.into_iter().map(|(_, a)| a.tags).collect() })
     }
 
     /// Gives each of `photos` the tags at the same place in `tags`, as undo puts them back;
     /// saves, and returns them.
-    pub fn set_tags(&self, photos: &[PathBuf], tags: &[Vec<String>]) -> Result<Vec<Vec<String>>, Problem> {
+    pub fn set_tags(self: &Arc<Self>, photos: &[PathBuf], tags: &[Vec<String>]) -> Result<Vec<Vec<String>>, Problem> {
         if photos.len() != tags.len() {
             return Err(format!("{} photos but {} sets of tags", photos.len(), tags.len()).into());
         }
-        Ok(self.update_tags(photos, |i, _| tags[i].clone())?.after)
-    }
-
-    fn update_tags(&self, photos: &[PathBuf], retag: impl Fn(usize, &[String]) -> Vec<String>) -> Result<TagsChanged, Problem> {
-        let mut entries = self.entries.lock().map_err(|e| e.to_string())?;
-        let mut previous = Vec::new();
-        let (mut before, mut after) = (Vec::new(), Vec::new());
-        for (i, photo) in photos.iter().enumerate() {
-            let old = entries.get(photo).cloned();
-            let mut entry = old.clone().unwrap_or_default();
-            previous.push((photo.clone(), old));
-            let was = std::mem::take(&mut entry.tags);
-            entry.tags = tidy(retag(i, &was));
-            before.push(was);
-            after.push(entry.tags.clone());
-            if entry.worth_keeping() {
-                entries.insert(photo.clone(), entry);
-            } else {
-                entries.remove(photo);
-            }
-        }
-        if let Err(error) = self.save(&entries) {
-            for (photo, entry) in previous {
-                match entry {
-                    Some(entry) => entries.insert(photo, entry),
-                    None => entries.remove(&photo),
-                };
-            }
-            return Err(error);
-        }
-        Ok(TagsChanged { before, after })
+        let changed = self.update_entries(photos, |i, entry| entry.tags = tidy(tags[i].clone()))?;
+        Ok(changed.into_iter().map(|(_, after)| after.tags).collect())
     }
 
     /// Applies `change` to `photos`, saves, and returns their ratings before and after. Their
@@ -372,10 +358,22 @@ impl Ratings {
     }
 
     /// Gives each photo the rating `rate` makes from its place and its rating now; saves, and
-    /// has the sidecars of those that changed written. A sidecar another app changed since the
-    /// last sync is read first, so a key changes only what it says, on top of that app's change.
-    /// If saving fails, nothing changes.
+    /// has the sidecars of those that changed written.
     fn update(self: &Arc<Self>, photos: &[PathBuf], rate: impl Fn(usize, Rating) -> Rating) -> Result<Changed, Problem> {
+        let changed = self.update_entries(photos, |i, entry| entry.rating = rate(i, entry.rating))?;
+        Ok(Changed {
+            before: changed.iter().map(|(before, _)| before.rating).collect(),
+            after: changed.iter().map(|(_, after)| after.rating).collect(),
+            tags: changed.into_iter().map(|(_, after)| after.tags).collect(),
+        })
+    }
+
+    /// Changes each photo's entry as `change` says, from its place and its entry now; saves, and
+    /// has the sidecars of those whose rating or tags changed written. A sidecar another app
+    /// changed since the last sync is read first, so a key or a tag changes only what it says, on
+    /// top of that app's change. Returns each entry before and after. If saving fails, nothing
+    /// changes.
+    fn update_entries(self: &Arc<Self>, photos: &[PathBuf], change: impl Fn(usize, &mut Entry)) -> Result<Vec<(Entry, Entry)>, Problem> {
         // The sidecars, then the entries: the order the writes take them in too.
         let io = self.sidecar_io.lock().map_err(|e| e.to_string())?;
         let theirs = self.newer_sidecars(photos);
@@ -383,31 +381,28 @@ impl Ratings {
         let now = now_ms();
         let mut changed = Vec::new();
         let mut previous = Vec::new();
-        let (before, after) = photos
-            .iter()
-            .enumerate()
-            .map(|(i, photo)| {
-                previous.push((photo.clone(), entries.get(photo).cloned()));
-                let mut entry = match theirs.get(photo) {
-                    Some(&(rating, stamp)) => Entry::from_sidecar(rating, stamp, entries.get(photo).map(|e| e.tags.clone()).unwrap_or_default()),
-                    None => entries.get(photo).cloned().unwrap_or_default(),
-                };
-                let before = entry.rating;
-                entry.rating = rate(i, before);
-                entry.rating.stars = entry.rating.stars.min(5);
-                if entry.rating != before {
-                    entry.changed_ms = now;
-                    changed.push(photo.clone());
-                }
-                let after = entry.rating;
-                if entry.worth_keeping() {
-                    entries.insert(photo.clone(), entry);
-                } else {
-                    entries.remove(photo);
-                }
-                (before, after)
-            })
-            .unzip();
+        let mut result = Vec::new();
+        for (i, photo) in photos.iter().enumerate() {
+            let old = entries.get(photo).cloned();
+            let mut entry = match theirs.get(photo) {
+                Some((rating, tags, stamp)) => Entry::from_sidecar(old.as_ref(), *rating, *stamp, tags.clone()),
+                None => old.clone().unwrap_or_default(),
+            };
+            previous.push((photo.clone(), old));
+            let before = entry.clone();
+            change(i, &mut entry);
+            entry.rating.stars = entry.rating.stars.min(5);
+            if entry.rating != before.rating || entry.tags != before.tags {
+                entry.changed_ms = now;
+                changed.push(photo.clone());
+            }
+            if entry.worth_keeping() {
+                entries.insert(photo.clone(), entry.clone());
+            } else {
+                entries.remove(photo);
+            }
+            result.push((before, entry));
+        }
         if let Err(error) = self.save(&entries) {
             for (photo, entry) in previous {
                 match entry {
@@ -420,12 +415,12 @@ impl Ratings {
         drop(entries);
         drop(io);
         self.write_sidecars_soon(changed);
-        Ok(Changed { before, after })
+        Ok(result)
     }
 
     /// The ratings in the sidecars of `photos` that another app changed since PhotoMatch last
     /// wrote or read them, and later than PhotoMatch's own last change, with their stamps.
-    fn newer_sidecars(&self, photos: &[PathBuf]) -> HashMap<PathBuf, (Rating, Stamp)> {
+    fn newer_sidecars(&self, photos: &[PathBuf]) -> HashMap<PathBuf, (Rating, Vec<String>, Stamp)> {
         let known: Vec<_> = match self.entries.lock() {
             Ok(entries) => photos.iter().filter(|p| sidecar::has_sidecar(p)).map(|p| (p.clone(), entries.get(p).cloned().unwrap_or_default())).collect(),
             Err(_) => return HashMap::new(),
@@ -434,10 +429,10 @@ impl Ratings {
         for (photo, entry) in known {
             let path = sidecar::path_for(&photo);
             let Some(stamp) = sidecar::stamp(&path).filter(|&stamp| entry.behind(stamp)) else { continue };
-            match sidecar::read(&path) {
-                Ok(rating) => {
+            match sidecar::read_with_tags(&path) {
+                Ok((rating, tags)) => {
                     self.sidecars_read.fetch_add(1, Ordering::Relaxed);
-                    theirs.insert(photo, (rating, stamp));
+                    theirs.insert(photo, (rating, tags, stamp));
                 }
                 Err(error) => self.sidecar_problem(&photo, &error, false),
             }
@@ -485,7 +480,7 @@ impl Ratings {
             if sidecar::stamp(&path).is_some_and(|stamp| entry.behind(stamp)) {
                 continue;
             }
-            match sidecar::write(&path, entry.rating) {
+            match sidecar::write(&path, entry.rating, &entry.tags) {
                 Ok(stamp) => {
                     written += 1;
                     if let Ok(mut entries) = self.entries.lock() {
@@ -493,6 +488,7 @@ impl Ratings {
                         let now = entries.entry(photo.clone()).or_default();
                         now.sidecar = Some(stamp);
                         now.synced = Some(entry.rating);
+                        now.synced_tags = Some(entry.tags.clone());
                     }
                 }
                 Err(error) => self.sidecar_problem(photo, &error, true),
@@ -525,7 +521,7 @@ impl Ratings {
             let path = sidecar::path_for(photo);
             let entry = self.entries.lock().ok().and_then(|m| m.get(photo).cloned());
             match (sidecar::stamp(&path), entry) {
-                (None, Some(entry)) if entry.rating != Rating::default() => to_write.push(photo.clone()),
+                (None, Some(entry)) if entry.rating != Rating::default() || !entry.tags.is_empty() => to_write.push(photo.clone()),
                 (None, _) => {}
                 (Some(stamp), Some(entry)) if entry.sidecar == Some(stamp) => {
                     if entry.owes_a_write() {
@@ -533,15 +529,22 @@ impl Ratings {
                     }
                 }
                 (Some(stamp), Some(entry)) if entry.changed_ms > stamp.modified_ms => to_write.push(photo.clone()),
-                (Some(stamp), entry) => match sidecar::read(&path) {
-                    Ok(rating) => {
+                (Some(stamp), entry) => match sidecar::read_with_tags(&path) {
+                    Ok((rating, theirs)) => {
                         synced.read += 1;
-                        if let Ok(mut entries) = self.entries.lock() {
-                            let tags = entries.get(photo).map(|e| e.tags.clone()).unwrap_or_default();
-                            entries.insert(photo.clone(), Entry::from_sidecar(rating, stamp, tags));
-                        }
+                        let taken = Entry::from_sidecar(entry.as_ref(), rating, stamp, theirs);
                         if rating != entry.as_ref().map(|e| e.rating).unwrap_or_default() {
                             synced.taken.push((i, rating));
+                        }
+                        if taken.tags != entry.as_ref().map(|e| e.tags.clone()).unwrap_or_default() {
+                            synced.retagged.push((i, taken.tags.clone()));
+                        }
+                        // Tags that never reached the sidecar, joined to its keywords, are owed to it.
+                        if taken.owes_a_write() {
+                            to_write.push(photo.clone());
+                        }
+                        if let Ok(mut entries) = self.entries.lock() {
+                            entries.insert(photo.clone(), taken);
                         }
                     }
                     Err(error) => self.sidecar_problem(photo, &error, false),
@@ -705,7 +708,7 @@ mod tests {
 
         // Lightroom rejects it and gives it two stars, a moment later.
         std::thread::sleep(Duration::from_millis(20));
-        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Rejected, stars: 2, label: Label::Red }).unwrap();
+        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Rejected, stars: 2, label: Label::Red }, &[]).unwrap();
         let synced = ratings.sync(&[raw.clone()]);
         let theirs = Rating { pick: Pick::Rejected, stars: 2, label: Label::Red };
         assert_eq!((synced.taken, synced.read, synced.written), (vec![(0, theirs)], 1, 0));
@@ -722,7 +725,7 @@ mod tests {
         let (dir, ratings, [raw, ..]) = library("sidecar-ours");
         let path = dir.join("DSC1.xmp");
         // Another app's sidecar from an hour ago, which PhotoMatch hasn't seen.
-        sidecar::write(&path, Rating { stars: 1, ..Default::default() }).unwrap();
+        sidecar::write(&path, Rating { stars: 1, ..Default::default() }, &[]).unwrap();
         let hour_ago = SystemTime::now() - Duration::from_secs(3600);
         std::fs::File::options().write(true).open(&path).unwrap().set_modified(hour_ago).unwrap();
         // PhotoMatch's rating, given now, whose write didn't happen: as if it failed.
@@ -742,7 +745,7 @@ mod tests {
     fn a_sidecar_wins_over_a_rating_from_before_sidecars() {
         let (dir, ratings, [raw, ..]) = library("sidecar-before");
         ratings.entries.lock().unwrap().insert(raw.clone(), Entry { rating: Rating { stars: 3, ..Default::default() }, ..Default::default() });
-        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Picked, ..Default::default() }).unwrap();
+        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Picked, ..Default::default() }, &[]).unwrap();
 
         let synced = ratings.sync(&[raw.clone()]);
         assert_eq!(synced.taken, vec![(0, Rating { pick: Pick::Picked, ..Default::default() })]);
@@ -776,7 +779,7 @@ mod tests {
         // Lightroom gives it two stars, and PhotoMatch hasn't synced since; then a red label here.
         std::thread::sleep(Duration::from_millis(20));
         let lightrooms = Rating { pick: Pick::Picked, stars: 2, label: Label::None };
-        sidecar::write(&dir.join("DSC1.xmp"), lightrooms).unwrap();
+        sidecar::write(&dir.join("DSC1.xmp"), lightrooms, &[]).unwrap();
         let changed = ratings.change(&[raw.clone()], RatingChange { label: Some(Label::Red), ..Default::default() }).unwrap();
         ratings.flush(Duration::from_secs(5));
 
@@ -960,24 +963,49 @@ mod tests {
         std::fs::remove_dir_all(data).unwrap();
     }
 
-    /// A photo's tags stay when another app changes its sidecar, through a sync and through a key
-    /// pressed on top of that change: the sidecar doesn't hold them yet (record 0011).
+    /// Tags reach the sidecar as Lightroom's keywords, and come back from it: another app's newer
+    /// keywords are taken at a sync, and a key pressed on top of another app's change keeps them
+    /// (record 0012).
     #[test]
-    fn tags_stay_when_another_app_changes_the_sidecar() {
-        let (dir, ratings, [raw, ..]) = library("tags-theirs");
-        ratings.change(&[raw.clone()], picked(4)).unwrap();
-        ratings.retag(&[raw.clone()], &TagChange::Add { tags: strings(&["Wedding"]) }).unwrap();
+    fn tags_go_to_the_sidecar_and_another_app_s_newer_keywords_come_back() {
+        let (dir, ratings, [raw, dng, jpeg]) = library("tags-theirs");
+        let sidecar = dir.join("DSC1.xmp");
+        ratings.retag(&[raw.clone(), dng.clone(), jpeg.clone()], &TagChange::Add { tags: strings(&["Wedding > Rafa & Pam"]) }).unwrap();
         ratings.flush(Duration::from_secs(5));
-        std::thread::sleep(Duration::from_millis(20));
-        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Rejected, stars: 2, label: Label::Red }).unwrap();
-        assert_eq!(ratings.sync(&[raw.clone()]).read, 1);
-        assert_eq!(ratings.tags(&raw), strings(&["Wedding"]), "through a sync");
+        assert_eq!(sidecar::read_with_tags(&sidecar).unwrap().1, strings(&["Wedding > Rafa & Pam"]), "written as keywords");
+        assert!(!dir.join("L1.xmp").exists() && !dir.join("IMG1.xmp").exists(), "a DNG's and a JPEG's tags stay in the store");
+        assert_eq!(ratings.sync(&[raw.clone()]).written, 0, "in step");
 
+        // Lightroom takes one off and adds another, a moment later.
         std::thread::sleep(Duration::from_millis(20));
-        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Picked, stars: 1, label: Label::None }).unwrap();
-        ratings.change(&[raw.clone()], picked(5)).unwrap();
+        sidecar::write(&sidecar, Rating { stars: 2, ..Default::default() }, &strings(&["Ceremony"])).unwrap();
+        let synced = ratings.sync(&[raw.clone()]);
+        assert_eq!(synced.retagged, vec![(0, strings(&["Ceremony"]))]);
+        assert_eq!(ratings.tags(&raw), strings(&["Ceremony"]));
+
+        // And again; a key pressed on top of that change keeps its keywords, and writes them back.
+        std::thread::sleep(Duration::from_millis(20));
+        sidecar::write(&sidecar, Rating { stars: 2, ..Default::default() }, &strings(&["Ceremony", "Family"])).unwrap();
+        let changed = ratings.change(&[raw.clone()], picked(5)).unwrap();
+        assert_eq!(changed.tags, vec![strings(&["Ceremony", "Family"])], "the tags after the key, taken from the sidecar");
         ratings.flush(Duration::from_secs(5));
-        assert_eq!(ratings.tags(&raw), strings(&["Wedding"]), "through a key on top of another app's change");
+        assert_eq!(sidecar::read_with_tags(&sidecar).unwrap(), (Rating { pick: Pick::Picked, stars: 5, label: Label::None }, strings(&["Ceremony", "Family"])));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Tags kept before they went to the sidecars join its keywords, as the other app never saw
+    /// them, and are written there at the next sync (record 0012).
+    #[test]
+    fn tags_kept_before_the_sidecars_held_them_join_their_keywords() {
+        let (dir, ratings, [raw, ..]) = library("tags-before");
+        let sidecar = dir.join("DSC1.xmp");
+        // As step 2.55 kept them: in the store only, never synced.
+        ratings.entries.lock().unwrap().insert(raw.clone(), Entry { tags: strings(&["Old"]), ..Default::default() });
+        sidecar::write(&sidecar, Rating { stars: 3, ..Default::default() }, &strings(&["Lightroom's"])).unwrap();
+        let synced = ratings.sync(&[raw.clone()]);
+        assert_eq!(ratings.tags(&raw), strings(&["Lightroom's", "Old"]));
+        assert_eq!((synced.read, synced.written), (1, 1), "read, then written back with both");
+        assert_eq!(sidecar::read_with_tags(&sidecar).unwrap().1, strings(&["Lightroom's", "Old"]));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

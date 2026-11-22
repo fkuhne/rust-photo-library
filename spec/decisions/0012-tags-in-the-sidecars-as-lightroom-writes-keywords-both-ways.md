@@ -1,6 +1,6 @@
 # 0012. Tags in the sidecars, as Lightroom writes keywords, both ways
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-22
 
 ## Context
@@ -42,7 +42,7 @@ The owner chose for PhotoMatch on 2026-11-22: as Lightroom writes them; both way
 
 ## Assumptions to verify
 
-- [ ] Keywords written so read back as the same tags; a sidecar as Lightroom writes it, and one with `dc:subject` alone, read as expected: the library's tests.
+- [x] Keywords written so read back as the same tags; a sidecar as Lightroom writes it, and one with `dc:subject` alone, read as expected: the library's tests pass on 2026-11-22, `keywords_read_as_tags_and_are_written_as_lightroom_writes_them`, `tags_go_to_the_sidecar_and_another_app_s_newer_keywords_come_back` and `tags_kept_before_the_sidecars_held_them_join_their_keywords`; Lightroom's own fields, its keyword among them, still kept; 46 tests, 50 with `places`.
 - [ ] Lightroom Classic shows the tags as its keywords, with their hierarchy: on the owner's PC, Lightroom Classic 8.2.1.
 - [ ] Capture One shows them: PhotoMatch's step 5.3, with its trial.
 
