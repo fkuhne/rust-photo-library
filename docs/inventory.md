@@ -145,6 +145,7 @@ What an app needs, as of step 1.4:
 - **To build:** the library by git at a commit, nothing else of LibRaw's: Cargo fetches its submodule with it (the Cargo book). And on the machine, a C and C++ compiler, and libclang for `bindgen`: on a Mac, Xcode's Command Line Tools.
 - **A `match` on `Problem`** gets a wildcard arm.
 - **A photo's position** ([0010](../spec/decisions/0010-a-photo-s-position-and-its-place-named-offline-from-geonames.md)), from its file: `PhotoInfo::position`; from its sidecar, read fresh: `sidecar::position(photo)`. `Want` has a fifth way, `Details`, so a `match` on it needs its arm. Details cached before it are read again once, without a preview; `PhotoInfo::details_version` says which.
+- **The photographer's tags** ([0011](../spec/decisions/0011-the-photographer-s-tags-in-the-store-beside-the-rating.md)), in each app's store beside the rating: `Ratings::tags(photo)`, `retag(photos, &TagChange)`, which adds, removes or renames and returns the tags before and after, and `set_tags` for undo; `ratings::tags_from(text)` reads them as typed. Not in the sidecars yet.
 - **Its place,** with the feature `places`: `places::place_of(position)`, a `Place` with its town, region and country, in English. The list takes about 10 MB of memory once read, in 61 to 74 ms on the planning Mac, a lookup 3 to 50 µs after. An app with it credits GeoNames (the licences, above).
 
 ## Open questions

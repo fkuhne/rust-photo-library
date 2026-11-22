@@ -84,7 +84,7 @@ pub struct Changed {
 }
 
 /// What the file keeps for a photo.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Entry {
     #[serde(flatten)]
@@ -100,17 +100,22 @@ struct Entry {
     /// step 2.21. Where it differs from `rating`, a write is owed, as after one that failed.
     #[serde(default)]
     synced: Option<Rating>,
+    /// The photographer's tags, each its levels joined by " > ", sorted (record 0011); left out of
+    /// the file when there are none, so a store from before reads as it was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tags: Vec<String>,
 }
 
 impl Entry {
     /// A photo with no rating isn't kept, unless its sidecar's stamp must be.
     fn worth_keeping(&self) -> bool {
-        self.rating != Rating::default() || self.sidecar.is_some()
+        self.rating != Rating::default() || self.sidecar.is_some() || !self.tags.is_empty()
     }
 
-    /// Taken from a sidecar another app changed.
-    fn from_sidecar(rating: Rating, stamp: Stamp) -> Self {
-        Self { rating, changed_ms: stamp.modified_ms, sidecar: Some(stamp), synced: Some(rating) }
+    /// Taken from a sidecar another app changed, the photo's tags kept: the sidecar doesn't hold
+    /// them yet (record 0011).
+    fn from_sidecar(rating: Rating, stamp: Stamp, tags: Vec<String>) -> Self {
+        Self { rating, changed_ms: stamp.modified_ms, sidecar: Some(stamp), synced: Some(rating), tags }
     }
 
     /// Whether the sidecar has another app's change that PhotoMatch hasn't seen, newer than
@@ -150,6 +155,74 @@ pub struct Synced {
     pub taken: Vec<(usize, Rating)>,
     pub read: usize,
     pub written: usize,
+}
+
+/// A change of the photographer's tags (record 0011).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum TagChange {
+    /// These tags added, each as `tags_from` reads it.
+    Add { tags: Vec<String> },
+    /// These tags taken off, with their levels below.
+    Remove { tags: Vec<String> },
+    /// One tag renamed, its levels below with it.
+    Rename { from: String, to: String },
+}
+
+/// Each photo's tags before and after a change, for undo.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TagsChanged {
+    pub before: Vec<Vec<String>>,
+    pub after: Vec<Vec<String>>,
+}
+
+/// The tags typed in `text`, as Lightroom Classic has them typed: commas between tags, `>` or
+/// `|` between levels; each level trimmed, empty ones dropped (record 0011).
+pub fn tags_from(text: &str) -> Vec<String> {
+    tidy(text.split(',').filter_map(tag_from).collect())
+}
+
+/// One tag typed: its levels, trimmed, joined by " > "; `None` if it has none.
+pub fn tag_from(text: &str) -> Option<String> {
+    let levels: Vec<&str> = text.split(['>', '|']).map(str::trim).filter(|level| !level.is_empty()).collect();
+    (!levels.is_empty()).then(|| levels.join(" > "))
+}
+
+/// A tag's levels.
+fn levels(tag: &str) -> Vec<&str> {
+    tag.split(" > ").collect()
+}
+
+/// Whether `tag` is `parent`, or one of its levels below, letters' case aside.
+fn under(tag: &str, parent: &str) -> bool {
+    let (tag, parent) = (levels(tag), levels(parent));
+    tag.len() >= parent.len() && tag.iter().zip(&parent).all(|(a, b)| a.to_lowercase() == b.to_lowercase())
+}
+
+/// Sorted, letters' case aside, without repeats; the first spelling kept.
+fn tidy(tags: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut tags: Vec<String> = tags.into_iter().filter(|tag| seen.insert(tag.to_lowercase())).collect();
+    tags.sort_by_key(|tag| tag.to_lowercase());
+    tags
+}
+
+/// A photo's tags after `change`.
+fn retagged(change: &TagChange, tags: &[String]) -> Vec<String> {
+    match change {
+        TagChange::Add { tags: new } => tags.iter().cloned().chain(new.iter().filter_map(|tag| tag_from(tag))).collect(),
+        TagChange::Remove { tags: gone } => {
+            let gone: Vec<String> = gone.iter().filter_map(|tag| tag_from(tag)).collect();
+            tags.iter().filter(|tag| !gone.iter().any(|g| under(tag, g))).cloned().collect()
+        }
+        TagChange::Rename { from, to } => {
+            let (Some(from), Some(to)) = (tag_from(from), tag_from(to)) else { return tags.to_vec() };
+            let depth = levels(&from).len();
+            tags.iter()
+                .map(|tag| if under(tag, &from) { std::iter::once(to.as_str()).chain(levels(tag)[depth..].iter().copied()).collect::<Vec<_>>().join(" > ") } else { tag.clone() })
+                .collect()
+        }
+    }
 }
 
 pub struct Ratings {
@@ -221,6 +294,57 @@ impl Ratings {
         self.entries.lock().ok().and_then(|m| m.get(photo).map(|e| e.rating)).unwrap_or_default()
     }
 
+    /// The photographer's tags on `photo`, sorted (record 0011).
+    pub fn tags(&self, photo: &Path) -> Vec<String> {
+        self.entries.lock().ok().and_then(|m| m.get(photo).map(|e| e.tags.clone())).unwrap_or_default()
+    }
+
+    /// Applies `change` to the tags of `photos`, saves, and returns their tags before and after.
+    /// No sidecar is written: they don't hold tags yet (record 0011). If saving fails, nothing
+    /// changes.
+    pub fn retag(&self, photos: &[PathBuf], change: &TagChange) -> Result<TagsChanged, Problem> {
+        self.update_tags(photos, |_, tags| retagged(change, tags))
+    }
+
+    /// Gives each of `photos` the tags at the same place in `tags`, as undo puts them back;
+    /// saves, and returns them.
+    pub fn set_tags(&self, photos: &[PathBuf], tags: &[Vec<String>]) -> Result<Vec<Vec<String>>, Problem> {
+        if photos.len() != tags.len() {
+            return Err(format!("{} photos but {} sets of tags", photos.len(), tags.len()).into());
+        }
+        Ok(self.update_tags(photos, |i, _| tags[i].clone())?.after)
+    }
+
+    fn update_tags(&self, photos: &[PathBuf], retag: impl Fn(usize, &[String]) -> Vec<String>) -> Result<TagsChanged, Problem> {
+        let mut entries = self.entries.lock().map_err(|e| e.to_string())?;
+        let mut previous = Vec::new();
+        let (mut before, mut after) = (Vec::new(), Vec::new());
+        for (i, photo) in photos.iter().enumerate() {
+            let old = entries.get(photo).cloned();
+            let mut entry = old.clone().unwrap_or_default();
+            previous.push((photo.clone(), old));
+            let was = std::mem::take(&mut entry.tags);
+            entry.tags = tidy(retag(i, &was));
+            before.push(was);
+            after.push(entry.tags.clone());
+            if entry.worth_keeping() {
+                entries.insert(photo.clone(), entry);
+            } else {
+                entries.remove(photo);
+            }
+        }
+        if let Err(error) = self.save(&entries) {
+            for (photo, entry) in previous {
+                match entry {
+                    Some(entry) => entries.insert(photo, entry),
+                    None => entries.remove(&photo),
+                };
+            }
+            return Err(error);
+        }
+        Ok(TagsChanged { before, after })
+    }
+
     /// Applies `change` to `photos`, saves, and returns their ratings before and after. Their
     /// sidecars are written right after, in the background.
     pub fn change(self: &Arc<Self>, photos: &[PathBuf], change: RatingChange) -> Result<Changed, Problem> {
@@ -263,10 +387,10 @@ impl Ratings {
             .iter()
             .enumerate()
             .map(|(i, photo)| {
-                previous.push((photo.clone(), entries.get(photo).copied()));
+                previous.push((photo.clone(), entries.get(photo).cloned()));
                 let mut entry = match theirs.get(photo) {
-                    Some(&(rating, stamp)) => Entry::from_sidecar(rating, stamp),
-                    None => entries.get(photo).copied().unwrap_or_default(),
+                    Some(&(rating, stamp)) => Entry::from_sidecar(rating, stamp, entries.get(photo).map(|e| e.tags.clone()).unwrap_or_default()),
+                    None => entries.get(photo).cloned().unwrap_or_default(),
                 };
                 let before = entry.rating;
                 entry.rating = rate(i, before);
@@ -275,12 +399,13 @@ impl Ratings {
                     entry.changed_ms = now;
                     changed.push(photo.clone());
                 }
+                let after = entry.rating;
                 if entry.worth_keeping() {
                     entries.insert(photo.clone(), entry);
                 } else {
                     entries.remove(photo);
                 }
-                (before, entry.rating)
+                (before, after)
             })
             .unzip();
         if let Err(error) = self.save(&entries) {
@@ -302,7 +427,7 @@ impl Ratings {
     /// wrote or read them, and later than PhotoMatch's own last change, with their stamps.
     fn newer_sidecars(&self, photos: &[PathBuf]) -> HashMap<PathBuf, (Rating, Stamp)> {
         let known: Vec<_> = match self.entries.lock() {
-            Ok(entries) => photos.iter().filter(|p| sidecar::has_sidecar(p)).map(|p| (p.clone(), entries.get(p).copied().unwrap_or_default())).collect(),
+            Ok(entries) => photos.iter().filter(|p| sidecar::has_sidecar(p)).map(|p| (p.clone(), entries.get(p).cloned().unwrap_or_default())).collect(),
             Err(_) => return HashMap::new(),
         };
         let mut theirs = HashMap::new();
@@ -356,7 +481,7 @@ impl Ratings {
         for photo in photos {
             let Ok(_io) = self.sidecar_io.lock() else { break };
             let path = sidecar::path_for(photo);
-            let entry = self.entries.lock().ok().and_then(|m| m.get(photo).copied()).unwrap_or_default();
+            let entry = self.entries.lock().ok().and_then(|m| m.get(photo).cloned()).unwrap_or_default();
             if sidecar::stamp(&path).is_some_and(|stamp| entry.behind(stamp)) {
                 continue;
             }
@@ -398,7 +523,7 @@ impl Ratings {
             }
             let Ok(_io) = self.sidecar_io.lock() else { break };
             let path = sidecar::path_for(photo);
-            let entry = self.entries.lock().ok().and_then(|m| m.get(photo).copied());
+            let entry = self.entries.lock().ok().and_then(|m| m.get(photo).cloned());
             match (sidecar::stamp(&path), entry) {
                 (None, Some(entry)) if entry.rating != Rating::default() => to_write.push(photo.clone()),
                 (None, _) => {}
@@ -412,9 +537,10 @@ impl Ratings {
                     Ok(rating) => {
                         synced.read += 1;
                         if let Ok(mut entries) = self.entries.lock() {
-                            entries.insert(photo.clone(), Entry::from_sidecar(rating, stamp));
+                            let tags = entries.get(photo).map(|e| e.tags.clone()).unwrap_or_default();
+                            entries.insert(photo.clone(), Entry::from_sidecar(rating, stamp, tags));
                         }
-                        if rating != entry.map(|e| e.rating).unwrap_or_default() {
+                        if rating != entry.as_ref().map(|e| e.rating).unwrap_or_default() {
                             synced.taken.push((i, rating));
                         }
                     }
@@ -764,6 +890,94 @@ mod tests {
         let written = photos.iter().filter(|p| sidecar::path_for(p).exists()).count();
         assert_eq!(written, photos.len(), "quitting would have cut the sync short");
         assert_eq!(syncing.join().unwrap().written, photos.len());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn strings(tags: &[&str]) -> Vec<String> {
+        tags.iter().map(|t| t.to_string()).collect()
+    }
+
+    /// Typed as Lightroom has them typed: commas between tags, `>` or `|` between levels (record 0011).
+    #[test]
+    fn tags_read_as_typed() {
+        assert_eq!(tags_from(" Travel >Portugal , Lisbon|Alfama,, christmas 2025 , Christmas 2025"), strings(&["christmas 2025", "Lisbon > Alfama", "Travel > Portugal"]));
+        assert_eq!(tag_from(" > | "), None);
+    }
+
+    #[test]
+    fn tags_are_added_removed_and_renamed_with_their_levels_below() {
+        let data = temp_folder("tags");
+        let (a, b) = (data.join("a.JPG"), data.join("b.JPG"));
+        let ratings = Ratings::open(data.join("ratings.json"));
+        let add = TagChange::Add { tags: strings(&["Travel > Portugal > Lisbon", "Family"]) };
+        let changed = ratings.retag(&[a.clone(), b.clone()], &add).unwrap();
+        assert_eq!(changed.before, vec![Vec::<String>::new(), Vec::new()]);
+        assert_eq!(ratings.tags(&a), strings(&["Family", "Travel > Portugal > Lisbon"]));
+        ratings.retag(&[b.clone()], &TagChange::Add { tags: strings(&["travel"]) }).unwrap();
+
+        ratings.retag(&[a.clone(), b.clone()], &TagChange::Rename { from: "travel".into(), to: "Trips".into() }).unwrap();
+        assert_eq!(ratings.tags(&a), strings(&["Family", "Trips > Portugal > Lisbon"]), "the levels below renamed with it");
+        assert_eq!(ratings.tags(&b), strings(&["Family", "Trips", "Trips > Portugal > Lisbon"]));
+
+        let removed = ratings.retag(&[a.clone(), b.clone()], &TagChange::Remove { tags: strings(&["trips"]) }).unwrap();
+        assert_eq!((ratings.tags(&a), ratings.tags(&b)), (strings(&["Family"]), strings(&["Family"])), "and removed with it");
+        ratings.set_tags(&[a.clone(), b.clone()], &removed.before).unwrap();
+        assert_eq!(ratings.tags(&b), strings(&["Family", "Trips", "Trips > Portugal > Lisbon"]), "undone");
+
+        // Kept in the file, read again.
+        let again = Ratings::open(data.join("ratings.json"));
+        assert_eq!(again.tags(&a), strings(&["Family", "Trips > Portugal > Lisbon"]));
+        assert_eq!(again.get(&a), Rating::default(), "a photo with tags and no rating is kept");
+        std::fs::remove_dir_all(data).unwrap();
+    }
+
+    /// A store from before tags reads as it was, and one without tags is written without them.
+    #[test]
+    fn a_store_from_before_reads_and_keeps_no_tags_key() {
+        let data = temp_folder("tags-before");
+        let photo = data.join("a.JPG");
+        std::fs::write(data.join("ratings.json"), format!(r#"{{"{}": {{"pick": "picked", "stars": 2, "label": "none", "changedMs": 1}}}}"#, photo.display())).unwrap();
+        let ratings = Ratings::open(data.join("ratings.json"));
+        assert_eq!((ratings.get(&photo).stars, ratings.tags(&photo)), (2, Vec::new()));
+        ratings.change(&[photo.clone()], picked(3)).unwrap();
+        ratings.flush(Duration::from_secs(5));
+        assert!(!std::fs::read_to_string(data.join("ratings.json")).unwrap().contains("\"tags\""), "no tags key");
+        std::fs::remove_dir_all(data).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tags_that_cant_be_saved_change_nothing() {
+        let data = temp_folder("tags-unsaved");
+        let photo = data.join("a.JPG");
+        let ratings = Ratings::open(data.join("ratings.json"));
+        ratings.retag(&[photo.clone()], &TagChange::Add { tags: strings(&["Kept"]) }).unwrap();
+        set_writable(&data, false);
+        let result = ratings.retag(&[photo.clone()], &TagChange::Add { tags: strings(&["Lost"]) });
+        set_writable(&data, true);
+        assert!(result.is_err());
+        assert_eq!(ratings.tags(&photo), strings(&["Kept"]));
+        std::fs::remove_dir_all(data).unwrap();
+    }
+
+    /// A photo's tags stay when another app changes its sidecar, through a sync and through a key
+    /// pressed on top of that change: the sidecar doesn't hold them yet (record 0011).
+    #[test]
+    fn tags_stay_when_another_app_changes_the_sidecar() {
+        let (dir, ratings, [raw, ..]) = library("tags-theirs");
+        ratings.change(&[raw.clone()], picked(4)).unwrap();
+        ratings.retag(&[raw.clone()], &TagChange::Add { tags: strings(&["Wedding"]) }).unwrap();
+        ratings.flush(Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(20));
+        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Rejected, stars: 2, label: Label::Red }).unwrap();
+        assert_eq!(ratings.sync(&[raw.clone()]).read, 1);
+        assert_eq!(ratings.tags(&raw), strings(&["Wedding"]), "through a sync");
+
+        std::thread::sleep(Duration::from_millis(20));
+        sidecar::write(&dir.join("DSC1.xmp"), Rating { pick: Pick::Picked, stars: 1, label: Label::None }).unwrap();
+        ratings.change(&[raw.clone()], picked(5)).unwrap();
+        ratings.flush(Duration::from_secs(5));
+        assert_eq!(ratings.tags(&raw), strings(&["Wedding"]), "through a key on top of another app's change");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

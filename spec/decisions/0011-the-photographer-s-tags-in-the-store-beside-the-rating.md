@@ -1,6 +1,6 @@
 # 0011. The photographer's tags, in the store beside the rating
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-21
 
 ## Context
@@ -38,8 +38,8 @@ The owner chose for PhotoMatch on 2026-11-21, "as you said": a tag is a name wit
 
 ## Assumptions to verify
 
-- [ ] A store from before reads, and keeps its ratings: the library's tests.
-- [ ] Tags survive a failed save, put back as they were: the library's tests.
+- [x] A store from before reads, and keeps its ratings: the library's tests, `a_store_from_before_reads_and_keeps_no_tags_key`, pass on 2026-11-21; a store without tags is written without the key.
+- [x] Tags survive a failed save, put back as they were: `tags_that_cant_be_saved_change_nothing` passes. And they stay when another app changes the sidecar, through a sync and through a key pressed on top of that change: `tags_stay_when_another_app_changes_the_sidecar`.
 
 ## Sources
 
