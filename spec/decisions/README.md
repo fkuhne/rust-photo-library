@@ -31,3 +31,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0008](0008-ratings-the-model-the-store-and-the-sidecars-move-whole.md) | Ratings: the model, the store and the sidecars move whole | Accepted | 2026-11-21 |
 | [0009](0009-every-still-photo-raw-extension-libraw-reads-and-has-colours-for.md) | Every still photo's RAW extension LibRaw reads and has the colours for | Accepted | 2026-11-21 |
 | [0010](0010-a-photo-s-position-and-its-place-named-offline-from-geonames.md) | A photo's position, and its place named offline from GeoNames | Accepted | 2026-11-21 |
+| [0011](0011-the-photographer-s-tags-in-the-store-beside-the-rating.md) | The photographer's tags, in the store beside the rating | Proposed | 2026-11-21 |
