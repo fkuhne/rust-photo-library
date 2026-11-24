@@ -233,6 +233,34 @@ impl ThumbCache {
         self.full(reader, path).map(|_| ())
     }
 
+    /// Where the photo's highlights clip and its shadows sink, as a PNG the size of the image it
+    /// goes over, `shown`, upright: red, blue and clear (the library's plan step 2.8, record 0014).
+    /// From a RAW file's sensor data, never its preview; from an image file's own pixels. Made
+    /// once and kept.
+    pub fn clipping(&self, reader: &dyn PhotoReader, path: &Path, shown: (u32, u32)) -> Result<Vec<u8>, Problem> {
+        let name = clipping_name(path, shown)?;
+        let _turn = self.turn(name.clone())?;
+        if let Ok(bytes) = std::fs::read(self.dir.join(&name)) {
+            return Ok(bytes);
+        }
+        let marks = if crate::raw::is_raw(path) {
+            crate::clipping::of_raw(path, shown)?
+        } else {
+            let photo = reader.read(path, Want::Largest)?;
+            let orientation = photo.orientation;
+            let image = upright(decode(&photo.into_largest_preview()?)?, orientation);
+            crate::clipping::of_image(&image, shown)
+        };
+        let png = marks.png()?;
+        self.keep(&name, &png);
+        Ok(png)
+    }
+
+    /// The clipping marks of `path` at `shown` if they're made, without making them.
+    pub fn cached_clipping(&self, path: &Path, shown: (u32, u32)) -> Option<Vec<u8>> {
+        std::fs::read(self.dir.join(clipping_name(path, shown).ok()?)).ok()
+    }
+
     /// The thumbnail of `path` if it's made, without waiting for a read under way or making it.
     pub fn cached_thumbnail(&self, path: &Path) -> Option<Vec<u8>> {
         std::fs::read(self.dir.join(format!("{}.jpg", cache_key(path).ok()?))).ok()
@@ -371,6 +399,14 @@ fn cache_key(path: &Path) -> Result<String, Problem> {
     Ok(hasher.finalize().to_hex()[..32].to_string())
 }
 
+/// The version of the clipping marks, in the names they're kept under: a change in how they're
+/// made leaves those made before unread.
+const CLIPPING_VERSION: u32 = 1;
+
+fn clipping_name(path: &Path, shown: (u32, u32)) -> Result<String, Problem> {
+    Ok(format!("{}-clip-v{CLIPPING_VERSION}-{}x{}.png", cache_key(path)?, shown.0, shown.1))
+}
+
 /// The name a photo's full size is kept under. Ending in `-full.jpg`, as `trim_full` looks for, so
 /// that those of an older `FULL_VERSION` are the oldest, and go first.
 fn full_name(path: &Path) -> Result<String, Problem> {
@@ -448,6 +484,28 @@ mod tests {
             let preview = Preview { width: 32, height: 24, format: ImageFormat::Jpeg, bytes: jpeg, tagged_orientation: false, made: true };
             Ok(Photo { previews: vec![preview], no_preview: None, orientation: Orientation::Normal, info: PhotoInfo::default() })
         }
+    }
+
+    #[test]
+    fn an_image_file_s_clipping_marks_are_kept_and_not_made_again() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-clipping-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("a.jpg");
+        std::fs::write(&photo, b"a photo").unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        let reader = Developed(AtomicUsize::new(0));
+        assert!(cache.cached_clipping(&photo, (32, 24)).is_none());
+
+        let png = cache.clipping(&reader, &photo, (32, 24)).unwrap();
+        let marks = image::load_from_memory_with_format(&png, ImageFormat::Png).unwrap();
+        assert_eq!((marks.width(), marks.height()), (32, 24));
+        // The made-up photo is black all over: a shadow everywhere, in blue.
+        assert_eq!(marks.to_rgba8().get_pixel(5, 5).0, [0, 96, 255, 255]);
+        assert_eq!(cache.clipping(&reader, &photo, (32, 24)).unwrap(), png);
+        assert_eq!(cache.cached_clipping(&photo, (32, 24)).unwrap(), png);
+        assert_eq!(reader.0.load(Ordering::SeqCst), 1, "read once");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -48,8 +48,18 @@ pub fn read_developed(path: &Path, full: bool) -> Result<Photo, Problem> {
 
 /// Opens the file by its path through LibRaw's own reader, which reads only what it's asked for
 /// (record 0016), on Windows through its wide-character call (record 0031).
-fn open(path: &Path) -> Result<rsraw::RawImage, Problem> {
+pub(crate) fn open(path: &Path) -> Result<rsraw::RawImage, Problem> {
     rsraw::RawImage::open_file(path).map_err(|e| opening_problem(path, e))
+}
+
+/// The orientation LibRaw's `flip` gives, the photo upright once turned so.
+pub(crate) fn orientation(flip: i32) -> Orientation {
+    match flip {
+        3 => Orientation::Rotate180,
+        5 => Orientation::Rotate270,
+        6 => Orientation::Rotate90,
+        _ => Orientation::Normal,
+    }
 }
 
 /// What it means when LibRaw can't open a file (plan step 2.35). LibRaw says only `Io` for a file
@@ -130,12 +140,7 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
     // one asked for (`raw2image.cpp`, lines 28 and 29). LibRaw's own data holds the orientation,
     // which `rsraw` doesn't wrap.
     let data: &rsraw_sys::libraw_data_t = raw.as_ref();
-    let orientation = match data.sizes.flip {
-        3 => Orientation::Rotate180,
-        5 => Orientation::Rotate270,
-        6 => Orientation::Rotate90,
-        _ => Orientation::Normal,
-    };
+    let orientation = orientation(data.sizes.flip);
     let lens = raw.lens_info();
     let (width, height) = if orientation.is_sideways() { (raw.height(), raw.width()) } else { (raw.width(), raw.height()) };
     let mut info = PhotoInfo {

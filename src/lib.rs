@@ -11,6 +11,8 @@
 pub use rsraw;
 pub use rsraw_sys;
 
+/// Where a photo's highlights clip and its shadows sink, from a RAW file's sensor data (record 0014).
+pub mod clipping;
 /// Writing a file atomically and durably, through a temporary file.
 pub mod files;
 /// A folder's photos, with its subfolders, and what in it couldn't be opened (record 0007).
