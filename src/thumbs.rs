@@ -25,6 +25,9 @@ const PREVIEW_QUALITY: u8 = 90;
 /// they're made. 2: the details give the upright size. 3: and the thumbnail's size. 4: 800
 /// pixels, shrunk with Lanczos3 (plan step 2.25).
 const CACHE_VERSION: u32 = 4;
+/// Bump to make every full-size photo again, and none of the rest, after a change in how they're
+/// developed. 2: without LibRaw's brightening, where the camera's tones are matched (record 0013).
+const FULL_VERSION: u32 = 2;
 
 pub struct ThumbCache {
     dir: PathBuf,
@@ -195,7 +198,7 @@ impl ThumbCache {
     /// else the RAW data developed at full size, in the camera's tones (plan step 2.26). Kept
     /// once made; a full-size preview that needs nothing done is served as the file stores it.
     pub fn full(&self, reader: &dyn PhotoReader, path: &Path) -> Result<(Vec<u8>, &'static str), Problem> {
-        let name = format!("{}-full.jpg", cache_key(path)?);
+        let name = full_name(path)?;
         let _turn = self.turn(name.clone())?;
         if let Ok(bytes) = std::fs::read(self.dir.join(&name)) {
             return Ok((bytes, "image/jpeg"));
@@ -223,7 +226,7 @@ impl ThumbCache {
     /// (plan step 2.51, record 0034): developed and kept, so that the zoom reads it from the cache.
     /// Nothing is read for a photo already kept.
     pub fn prepare_full(&self, reader: &dyn PhotoReader, path: &Path) -> Result<(), Problem> {
-        if self.dir.join(format!("{}-full.jpg", cache_key(path)?)).exists() {
+        if self.dir.join(full_name(path)?).exists() {
             return Ok(());
         }
         self.stats.prepared.fetch_add(1, Ordering::Relaxed);
@@ -368,6 +371,12 @@ fn cache_key(path: &Path) -> Result<String, Problem> {
     Ok(hasher.finalize().to_hex()[..32].to_string())
 }
 
+/// The name a photo's full size is kept under. Ending in `-full.jpg`, as `trim_full` looks for, so
+/// that those of an older `FULL_VERSION` are the oldest, and go first.
+fn full_name(path: &Path) -> Result<String, Problem> {
+    Ok(format!("{}-v{FULL_VERSION}-full.jpg", cache_key(path)?))
+}
+
 /// A preview that can't be decoded is damaged, as a RAW file's cut-off embedded JPEG is.
 // photo-library: public, as PhotoDev decodes previews with it (the library's plan step 1.2).
 pub fn decode(preview: &Preview) -> Result<DynamicImage, Problem> {
@@ -439,6 +448,26 @@ mod tests {
             let preview = Preview { width: 32, height: 24, format: ImageFormat::Jpeg, bytes: jpeg, tagged_orientation: false, made: true };
             Ok(Photo { previews: vec![preview], no_preview: None, orientation: Orientation::Normal, info: PhotoInfo::default() })
         }
+    }
+
+    #[test]
+    fn a_full_size_kept_by_an_older_development_is_made_again() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-full-version-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("a.ARW");
+        std::fs::write(&photo, b"a photo").unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        // As the version before kept it: under the name without a version, its pink still in it.
+        let older = dir.join("thumbnails").join(format!("{}-full.jpg", cache_key(&photo).unwrap()));
+        std::fs::write(&older, b"made with LibRaw's brightening").unwrap();
+        let reader = Developed(AtomicUsize::new(0));
+
+        let (bytes, _) = cache.full(&reader, &photo).unwrap();
+        assert_eq!(reader.0.load(Ordering::SeqCst), 1, "developed again");
+        assert_ne!(bytes, b"made with LibRaw's brightening");
+        assert!(full_name(&photo).unwrap().ends_with("-full.jpg"), "trimmed with the rest");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

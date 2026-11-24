@@ -244,6 +244,13 @@ fn develop(raw: &mut rsraw::RawImage, half: bool, reference: Option<&image::Dyna
     raw.set_half_size(half);
     raw.set_use_camera_wb(true);
     raw.as_mut().params.user_flip = 0;
+    // LibRaw brightens a photo until 1% of its pixels clip, "for dcraw compatibility" (LibRaw's
+    // `auto_bright_thr`), which flattens skin's highlights to pink, its red channel first. Where
+    // the tones are then matched to the camera's preview, that sets the brightness, so LibRaw's
+    // is left out (PhotoMatch's plan step 2.59; the library's record 0013).
+    if reference.is_some() {
+        raw.as_mut().params.no_auto_bright = 1;
+    }
     // LibRaw's own demosaic, AHD: PPG was 30% faster, and the owner found it less sharp at 100%
     // (plan step 2.51, records 0032 and 0033).
     raw.unpack().map_err(|e| e.to_string())?;

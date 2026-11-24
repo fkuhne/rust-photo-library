@@ -53,4 +53,7 @@ The work, as small steps in order. Each step names the decision records it depen
 - [x] 2.6 The tags in the sidecars, for PhotoMatch's plan step 2.56: as Lightroom Classic writes keywords, both ways, the newer change winning.
 
   Built on 2026-11-22 ([0012](decisions/0012-tags-in-the-sidecars-as-lightroom-writes-keywords-both-ways.md)): 46 tests pass, 50 with `places`. PhotoMatch took it at `b95d269`, its self-check passing on its seven folders, a RAW photo's tags reaching its sidecar and leaving it.
+- [x] 2.7 No pink patches at full size, for PhotoMatch's plan step 2.59: LibRaw's brightening left out where the tones are matched to the camera's preview, and the full sizes kept before made again.
+
+  Built on 2026-11-23 ([0013](decisions/0013-full-sizes-developed-without-libraw-s-brightening-where-the-camera-s-tones-are-matched.md)): on the owner's portrait, red at the top while green isn't on 0.00% of the full size, against 0.65%; 47 tests pass, 51 with `places`.
 - [ ] 2.2 PhotoDev on the library: its `library` module, `folder.rs` and `vendor` removed, its `edited` flag set after the library's listing, in PhotoDev's repository, with a record there that supersedes its 0008 for this code. Its tests, self-checks and originals test pass. Flips [0003](decisions/0003-private-now-written-so-it-can-be-opened.md) to Accepted, once every licence is listed.

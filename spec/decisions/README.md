@@ -33,3 +33,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0010](0010-a-photo-s-position-and-its-place-named-offline-from-geonames.md) | A photo's position, and its place named offline from GeoNames | Accepted | 2026-11-21 |
 | [0011](0011-the-photographer-s-tags-in-the-store-beside-the-rating.md) | The photographer's tags, in the store beside the rating | Accepted | 2026-11-21 |
 | [0012](0012-tags-in-the-sidecars-as-lightroom-writes-keywords-both-ways.md) | Tags in the sidecars, as Lightroom writes keywords, both ways | Accepted | 2026-11-22 |
+| [0013](0013-full-sizes-developed-without-libraw-s-brightening-where-the-camera-s-tones-are-matched.md) | Full sizes developed without LibRaw's brightening, where the camera's tones are matched | Accepted | 2026-11-23 |
