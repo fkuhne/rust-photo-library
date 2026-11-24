@@ -125,6 +125,12 @@ Step 1.4 adds `xmp_toolkit` 1.12.1, MIT or Apache 2.0, which builds Adobe's XMP 
 
 Step 1.3 adds `walkdir` 2.5.0 and `same-file` 1.0.6, both Unlicense or MIT, and on Windows `winapi-util` 0.1.11, Unlicense or MIT, and `windows-sys` 0.61.2, MIT or Apache 2.0: 109 packages from crates.io in all, from `cargo metadata` on 2026-11-21, at PhotoMatch's versions.
 
+Step 2.9, the Trash (record 0015), adds 12 packages, from the lockfiles at `1c767a9` and `0ad433e` and `cargo metadata` on 2026-11-24, recorded after the step's commit:
+- **On a Mac:** `objc2` 0.6.5, `objc2-encode` 4.1.0 and `objc2-foundation` 0.3.2, MIT, the versions Tauri brings an app already.
+- **On Windows and Linux:** `trash` 5.4.0, MIT, with `scopeguard` 1.2.0, `percent-encoding` 2.3.2, `portable-atomic` 1.15.0 and `portable-atomic-util` 0.2.8, MIT or Apache 2.0; `jiff` 1.0.3, `jiff-core` 1.0.2 and `jiff-static` 1.0.3, Unlicense or MIT; and `urlencoding` 2.1.3, MIT. On Windows, `trash` takes the `windows` crate at the library's 0.62.
+
+Every one allows MIT or Apache 2.0 publishing and closed use.
+
 ## What moved, and what changed on the way
 
 Plan step 1.2, on 2026-11-21, from PhotoMatch's commit `391fd74`: `photo.rs`, `raw.rs`, `image_file.rs`, `os_image.rs`, `thumbs.rs`, `problem.rs`, and `files.rs` with them, as `thumbs.rs` writes its files through it. Each moved as it was, with its tests, but for these, each marked in the code:
