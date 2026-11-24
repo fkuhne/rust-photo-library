@@ -40,6 +40,9 @@ pub mod sidecar;
 pub mod thumbs;
 /// Photos moved to the Trash with their companion and sidecar, and put back (record 0015).
 pub mod trashing;
+/// Photos moved or copied to another folder with their companion and sidecar, never over a file,
+/// and moved back (record 0016).
+pub mod moving;
 
 #[cfg(test)]
 mod tests {

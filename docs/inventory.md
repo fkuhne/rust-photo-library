@@ -131,6 +131,8 @@ Step 2.9, the Trash (record 0015), adds 12 packages, from the lockfiles at `1c76
 
 Every one allows MIT or Apache 2.0 publishing and closed use.
 
+Step 2.10, moving and copying (record 0016), adds no package: `libc` 0.2.191, MIT or Apache 2.0, already in the graph, becomes a direct dependency on a Mac, for `renamex_np`; `windows` 0.62.2 gains the feature `Win32_Storage_FileSystem`, for `MoveFileExW`. From `cargo metadata` on 2026-11-24.
+
 ## What moved, and what changed on the way
 
 Plan step 1.2, on 2026-11-21, from PhotoMatch's commit `391fd74`: `photo.rs`, `raw.rs`, `image_file.rs`, `os_image.rs`, `thumbs.rs`, `problem.rs`, and `files.rs` with them, as `thumbs.rs` writes its files through it. Each moved as it was, with its tests, but for these, each marked in the code:

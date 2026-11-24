@@ -269,6 +269,37 @@ impl ThumbCache {
     /// Keeps a file in the cache. A cache that can't be written to, full or deleted while the
     /// app runs, costs the time of reading the photo again later, never the photo itself: the
     /// folder is made again once, and if it still fails, the file isn't kept.
+    /// The key a photo's cached files are kept under, from its path, size and time of change:
+    /// taken before the photo moves, for `moved` (record 0016).
+    pub fn key_of(path: &Path) -> Option<String> {
+        cache_key(path).ok()
+    }
+
+    /// Photos moved, or copied, each from the key its files were kept under before to its new
+    /// path: their thumbnails and details renamed to its new key, or for a copy, those two copied,
+    /// so that they aren't made again. The cache is listed once for them all. A file that can't be
+    /// renamed is made again when it's next asked for.
+    pub fn moved(&self, photos: &[(String, PathBuf)], copy: bool) {
+        let renamed: HashMap<&str, String> = photos.iter().filter_map(|(key, to)| Some((key.as_str(), cache_key(to).ok()?))).collect();
+        let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(new) = name.get(..32).and_then(|key| renamed.get(key)) else { continue };
+            let rest = &name[32..];
+            let target = self.dir.join(format!("{new}{rest}"));
+            let kept = if !copy {
+                std::fs::rename(entry.path(), &target)
+            } else if rest == ".jpg" || rest == ".json" {
+                std::fs::copy(entry.path(), &target).map(|_| ())
+            } else {
+                Ok(())
+            };
+            if let Err(error) = kept {
+                eprintln!("photomatch: the thumbnail cache: can't keep {name} as {}: {error}", target.display());
+            }
+        }
+    }
+
     fn keep(&self, name: &str, bytes: &[u8]) {
         let path = self.dir.join(name);
         let kept = write_atomically(&path, bytes).or_else(|_| {
@@ -598,6 +629,39 @@ mod tests {
         assert!(cache.thumbnail(&GreyPhoto, &photo).is_ok(), "the photo still shows");
         assert!(cache.info(&GreyPhoto, &photo).is_ok());
         assert!(dir.join("thumbnails").is_dir(), "and the folder is made again");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A photo moved keeps its thumbnail and details, under its new key, and isn't read again; a
+    /// copy gets them too, the original keeping its own (record 0016).
+    #[test]
+    fn a_photo_moved_or_copied_keeps_its_thumbnail() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-moved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("Day 2")).unwrap();
+        let photo = dir.join("a.ARW");
+        std::fs::write(&photo, b"a photo").unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        let thumbnail = cache.thumbnail(&GreyPhoto, &photo).unwrap();
+        cache.info(&GreyPhoto, &photo).unwrap();
+
+        let key = ThumbCache::key_of(&photo).unwrap();
+        let moved = dir.join("Day 2/a.ARW");
+        std::fs::rename(&photo, &moved).unwrap();
+        cache.moved(&[(key, moved.clone())], false);
+        assert_eq!(cache.cached_thumbnail(&moved), Some(thumbnail.clone()), "kept under its new key");
+        let made = cache.stats().made;
+        cache.thumbnail(&GreyPhoto, &moved).unwrap();
+        assert_eq!(cache.stats().made, made, "and not made again");
+
+        let copy = dir.join("b.ARW");
+        std::fs::copy(&moved, &copy).unwrap();
+        let file = std::fs::File::options().write(true).open(&copy).unwrap();
+        file.set_modified(std::fs::metadata(&moved).unwrap().modified().unwrap()).unwrap();
+        drop(file);
+        cache.moved(&[(ThumbCache::key_of(&moved).unwrap(), copy.clone())], true);
+        assert_eq!(cache.cached_thumbnail(&copy), Some(thumbnail.clone()), "the copy has it");
+        assert_eq!(cache.cached_thumbnail(&moved), Some(thumbnail), "and the photo still");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

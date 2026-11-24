@@ -612,6 +612,7 @@ dependencies = [
  "image",
  "jpeg-decoder",
  "kamadak-exif",
+ "libc",
  "objc2",
  "objc2-foundation",
  "rsraw",

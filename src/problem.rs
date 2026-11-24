@@ -64,6 +64,12 @@ pub enum Problem {
     NotTrashed { photo: String, cause: String },
     /// A photo's files can't be moved back from the Trash, and stay there (record 0015).
     NotPutBack { photo: String, cause: String },
+    /// A photo's files can't be moved to another folder, and stay where they are (record 0016).
+    NotMoved { photo: String, cause: String },
+    /// A photo's files can't be copied to another folder; any copy made is removed (record 0016).
+    NotCopied { photo: String, cause: String },
+    /// Undo can't move a photo back where it was, nor its copy away (record 0016).
+    NotMovedBack { photo: String, cause: String },
     /// An answer for a folder that has since closed: nothing to show.
     Stale,
     /// Anything that shouldn't happen.
@@ -94,7 +100,10 @@ impl Problem {
             | Problem::RatingsNotSaved { cause }
             | Problem::SettingsNotSaved { cause }
             | Problem::NotTrashed { cause, .. }
-            | Problem::NotPutBack { cause, .. } => cause.clone(),
+            | Problem::NotPutBack { cause, .. }
+            | Problem::NotMoved { cause, .. }
+            | Problem::NotCopied { cause, .. }
+            | Problem::NotMovedBack { cause, .. } => cause.clone(),
             Problem::PhotoGone { cause }
             | Problem::PhotoNotAllowed { cause }
             | Problem::Damaged { cause }

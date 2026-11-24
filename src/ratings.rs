@@ -357,6 +357,35 @@ impl Ratings {
         Ok(self.update(photos, |i, _| ratings[i])?.after)
     }
 
+    /// Photos moved, each from its old path to its new one: their ratings and tags follow them,
+    /// saved (record 0016). Their sidecars moved with them, keeping their stamps, so nothing is
+    /// read or written again. An app finishes the sidecar writes owed first, with `flush`. If
+    /// saving fails, nothing changes.
+    pub fn moved(&self, moves: &[(PathBuf, PathBuf)]) -> Result<(), Problem> {
+        self.relocate(moves, false)
+    }
+
+    /// Photos copied: each copy gets the ratings and tags of the photo it was made from, as its
+    /// sidecar, copied with it, says.
+    pub fn copied(&self, copies: &[(PathBuf, PathBuf)]) -> Result<(), Problem> {
+        self.relocate(copies, true)
+    }
+
+    fn relocate(&self, pairs: &[(PathBuf, PathBuf)], copy: bool) -> Result<(), Problem> {
+        let _io = self.sidecar_io.lock().map_err(|e| e.to_string())?;
+        let mut entries = self.entries.lock().map_err(|e| e.to_string())?;
+        let mut next = entries.clone();
+        for (from, to) in pairs {
+            let entry = if copy { next.get(from).cloned() } else { next.remove(from) };
+            if let Some(entry) = entry {
+                next.insert(to.clone(), entry);
+            }
+        }
+        self.save(&next)?;
+        *entries = next;
+        Ok(())
+    }
+
     /// Gives each photo the rating `rate` makes from its place and its rating now; saves, and
     /// has the sidecars of those that changed written.
     fn update(self: &Arc<Self>, photos: &[PathBuf], rate: impl Fn(usize, Rating) -> Rating) -> Result<Changed, Problem> {
@@ -653,6 +682,28 @@ mod tests {
         let reopened = Ratings::open(file);
         assert_eq!(reopened.get(&a), Rating { pick: Pick::Picked, stars: 5, label: Label::Green });
         assert_eq!(reopened.get(&b), Rating::default());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Photos moved keep their ratings and tags at their new paths; a copy gets them too, and the
+    /// file keeps them (record 0016).
+    #[test]
+    fn ratings_follow_a_photo_moved_and_a_copy_gets_them() {
+        let dir = temp_folder("ratings-moved");
+        let file = dir.join("ratings.json");
+        let (a, moved, copy) = (dir.join("a.ARW"), dir.join("Day 2/a.ARW"), dir.join("Copies/a.ARW"));
+        let ratings = Ratings::open(file.clone());
+        ratings.change(&[a.clone()], RatingChange { stars: Some(4), ..Default::default() }).unwrap();
+        ratings.retag(&[a.clone()], &TagChange::Add { tags: vec!["Lisbon".into()] }).unwrap();
+        ratings.flush(Duration::from_secs(5));
+
+        ratings.moved(&[(a.clone(), moved.clone()), (dir.join("a.xmp"), dir.join("Day 2/a.xmp"))]).unwrap();
+        assert_eq!(ratings.get(&a), Rating::default(), "nothing left at the old path");
+        assert_eq!((ratings.get(&moved).stars, ratings.tags(&moved)), (4, vec!["Lisbon".to_string()]));
+        ratings.copied(&[(moved.clone(), copy.clone())]).unwrap();
+        let reopened = Ratings::open(file);
+        assert_eq!((reopened.get(&moved).stars, reopened.get(&copy).stars), (4, 4), "kept in the file");
+        assert_eq!(reopened.tags(&copy), ["Lisbon"]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
