@@ -38,6 +38,8 @@ pub mod raw;
 pub mod sidecar;
 /// Thumbnails, details and the large view's images, cached on disk (PhotoMatch's records 0015 and 0034).
 pub mod thumbs;
+/// Photos moved to the Trash with their companion and sidecar, and put back (record 0015).
+pub mod trashing;
 
 #[cfg(test)]
 mod tests {

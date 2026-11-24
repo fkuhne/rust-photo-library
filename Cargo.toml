@@ -35,6 +35,15 @@ flate2 = { version = "1.1.10", optional = true }
 # about 2.7 MB of data, which an app that doesn't name places leaves out.
 places = ["dep:flate2"]
 
+# The Trash (record 0015): on a Mac through NSFileManager, as Tauri's own objc2 crates have it;
+# elsewhere through the `trash` crate, whose `windows` is this library's.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.5"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+trash = "5.4.0"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Imaging", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
 

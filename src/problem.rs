@@ -60,6 +60,10 @@ pub enum Problem {
     RatingsFileUnreadable { file: String, cause: String },
     /// The settings file can't be written.
     SettingsNotSaved { cause: String },
+    /// A photo's files can't be moved to the Trash, and stay where they are (record 0015).
+    NotTrashed { photo: String, cause: String },
+    /// A photo's files can't be moved back from the Trash, and stay there (record 0015).
+    NotPutBack { photo: String, cause: String },
     /// An answer for a folder that has since closed: nothing to show.
     Stale,
     /// Anything that shouldn't happen.
@@ -88,7 +92,9 @@ impl Problem {
             | Problem::SidecarsNotWritable { cause, .. }
             | Problem::SidecarUnreadable { cause, .. }
             | Problem::RatingsNotSaved { cause }
-            | Problem::SettingsNotSaved { cause } => cause.clone(),
+            | Problem::SettingsNotSaved { cause }
+            | Problem::NotTrashed { cause, .. }
+            | Problem::NotPutBack { cause, .. } => cause.clone(),
             Problem::PhotoGone { cause }
             | Problem::PhotoNotAllowed { cause }
             | Problem::Damaged { cause }
