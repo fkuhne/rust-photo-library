@@ -70,6 +70,8 @@ pub enum Problem {
     NotCopied { photo: String, cause: String },
     /// Undo can't move a photo back where it was, nor its copy away (record 0016).
     NotMovedBack { photo: String, cause: String },
+    /// A photo's files can't be renamed, and keep their names (record 0017).
+    NotRenamed { photo: String, cause: String },
     /// An answer for a folder that has since closed: nothing to show.
     Stale,
     /// Anything that shouldn't happen.
@@ -103,7 +105,8 @@ impl Problem {
             | Problem::NotPutBack { cause, .. }
             | Problem::NotMoved { cause, .. }
             | Problem::NotCopied { cause, .. }
-            | Problem::NotMovedBack { cause, .. } => cause.clone(),
+            | Problem::NotMovedBack { cause, .. }
+            | Problem::NotRenamed { cause, .. } => cause.clone(),
             Problem::PhotoGone { cause }
             | Problem::PhotoNotAllowed { cause }
             | Problem::Damaged { cause }

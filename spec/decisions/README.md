@@ -37,3 +37,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0014](0014-clipping-marks-from-the-raw-data-at-the-size-of-the-image-shown.md) | Clipping marks from the RAW data, at the size of the image shown | Accepted | 2026-11-24 |
 | [0015](0015-photos-moved-to-the-trash-with-their-companion-and-sidecar-and-put-back.md) | Photos moved to the Trash with their companion and sidecar, and put back | Accepted | 2026-11-24 |
 | [0016](0016-photos-moved-or-copied-with-their-companion-and-sidecar-never-over-a-file-and-moved-back.md) | Photos moved or copied with their companion and sidecar, never over a file, and moved back | Accepted | 2026-11-24 |
+| [0017](0017-photos-renamed-with-their-companion-and-sidecar-in-an-order-that-frees-each-name-never-over-a-file.md) | Photos renamed with their companion and sidecar, in an order that frees each name, never over a file | Accepted | 2026-11-24 |

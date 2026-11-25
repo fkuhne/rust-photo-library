@@ -279,23 +279,38 @@ impl ThumbCache {
     /// path: their thumbnails and details renamed to its new key, or for a copy, those two copied,
     /// so that they aren't made again. The cache is listed once for them all. A file that can't be
     /// renamed is made again when it's next asked for.
+    ///
+    /// Where a file's new name is another's old one, as for two photos of one size and time that
+    /// swap names, every file goes through a hidden name first (record 0017).
     pub fn moved(&self, photos: &[(String, PathBuf)], copy: bool) {
         let renamed: HashMap<&str, String> = photos.iter().filter_map(|(key, to)| Some((key.as_str(), cache_key(to).ok()?))).collect();
         let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
+        let mut files: Vec<(PathBuf, PathBuf)> = Vec::new();
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             let Some(new) = name.get(..32).and_then(|key| renamed.get(key)) else { continue };
             let rest = &name[32..];
-            let target = self.dir.join(format!("{new}{rest}"));
-            let kept = if !copy {
-                std::fs::rename(entry.path(), &target)
-            } else if rest == ".jpg" || rest == ".json" {
-                std::fs::copy(entry.path(), &target).map(|_| ())
+            if !copy || rest == ".jpg" || rest == ".json" {
+                files.push((entry.path(), self.dir.join(format!("{new}{rest}"))));
+            }
+        }
+        let sources: HashSet<&PathBuf> = files.iter().map(|(from, _)| from).collect();
+        let crossing = !copy && files.iter().any(|(_, to)| sources.contains(to));
+        let mut moves: Vec<(PathBuf, PathBuf)> = Vec::new();
+        for (n, (from, to)) in files.iter().enumerate() {
+            if crossing {
+                let hidden = self.dir.join(format!(".moving-{}-{n}", std::process::id()));
+                if std::fs::rename(from, &hidden).is_ok() {
+                    moves.push((hidden, to.clone()));
+                }
             } else {
-                Ok(())
-            };
+                moves.push((from.clone(), to.clone()));
+            }
+        }
+        for (from, to) in moves {
+            let kept = if copy { std::fs::copy(&from, &to).map(|_| ()) } else { std::fs::rename(&from, &to) };
             if let Err(error) = kept {
-                eprintln!("photomatch: the thumbnail cache: can't keep {name} as {}: {error}", target.display());
+                eprintln!("photomatch: the thumbnail cache: can't keep {} as {}: {error}", from.display(), to.display());
             }
         }
     }
@@ -662,6 +677,36 @@ mod tests {
         cache.moved(&[(ThumbCache::key_of(&moved).unwrap(), copy.clone())], true);
         assert_eq!(cache.cached_thumbnail(&copy), Some(thumbnail.clone()), "the copy has it");
         assert_eq!(cache.cached_thumbnail(&moved), Some(thumbnail), "and the photo still");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Two photos of one size and time that swap names keep their own thumbnails, though each
+    /// one's new key is the other's old one (record 0017).
+    #[test]
+    fn photos_that_swap_names_keep_their_own_thumbnails() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-swapped-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (a, b) = (dir.join("a.ARW"), dir.join("b.ARW"));
+        std::fs::write(&a, b"one size").unwrap();
+        std::fs::write(&b, b"one size").unwrap();
+        let time = std::fs::metadata(&a).unwrap().modified().unwrap();
+        std::fs::File::options().write(true).open(&b).unwrap().set_modified(time).unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        cache.thumbnail(&GreyPhoto, &a).unwrap();
+        cache.thumbnail(&GreyPhoto, &b).unwrap();
+        let (key_a, key_b) = (ThumbCache::key_of(&a).unwrap(), ThumbCache::key_of(&b).unwrap());
+        let file = |key: &str| dir.join("thumbnails").join(format!("{key}.jpg"));
+        // Told apart by their bytes in the cache.
+        std::fs::write(file(&key_a), b"a's").unwrap();
+        std::fs::write(file(&key_b), b"b's").unwrap();
+        let between = dir.join("between");
+        std::fs::rename(&a, &between).unwrap();
+        std::fs::rename(&b, &a).unwrap();
+        std::fs::rename(&between, &b).unwrap();
+        cache.moved(&[(key_a, b.clone()), (key_b, a.clone())], false);
+        assert_eq!(std::fs::read(file(&ThumbCache::key_of(&b).unwrap())).unwrap(), b"a's");
+        assert_eq!(std::fs::read(file(&ThumbCache::key_of(&a).unwrap())).unwrap(), b"b's");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

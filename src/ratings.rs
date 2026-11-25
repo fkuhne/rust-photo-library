@@ -371,15 +371,23 @@ impl Ratings {
         self.relocate(copies, true)
     }
 
+    /// Every entry is taken before any is put, so that photos swapping names keep their own
+    /// (record 0017); a photo with none leaves its new path with none, rather than an old entry's.
     fn relocate(&self, pairs: &[(PathBuf, PathBuf)], copy: bool) -> Result<(), Problem> {
         let _io = self.sidecar_io.lock().map_err(|e| e.to_string())?;
         let mut entries = self.entries.lock().map_err(|e| e.to_string())?;
         let mut next = entries.clone();
-        for (from, to) in pairs {
-            let entry = if copy { next.get(from).cloned() } else { next.remove(from) };
-            if let Some(entry) = entry {
-                next.insert(to.clone(), entry);
+        let taken: Vec<(PathBuf, Option<Entry>)> = pairs.iter().map(|(from, to)| (to.clone(), entries.get(from).cloned())).collect();
+        if !copy {
+            for (from, _) in pairs {
+                next.remove(from);
             }
+        }
+        for (to, entry) in taken {
+            match entry {
+                Some(entry) => next.insert(to, entry),
+                None => next.remove(&to),
+            };
         }
         self.save(&next)?;
         *entries = next;
@@ -704,6 +712,23 @@ mod tests {
         let reopened = Ratings::open(file);
         assert_eq!((reopened.get(&moved).stars, reopened.get(&copy).stars), (4, 4), "kept in the file");
         assert_eq!(reopened.tags(&copy), ["Lisbon"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Photos that swap names keep their own ratings; a photo with none, moved to a path an old
+    /// entry has, has none (record 0017).
+    #[test]
+    fn ratings_follow_photos_that_swap_names() {
+        let dir = temp_folder("ratings-swapped");
+        let (a, b, c) = (dir.join("a.ARW"), dir.join("b.ARW"), dir.join("c.ARW"));
+        let ratings = Ratings::open(dir.join("ratings.json"));
+        ratings.change(&[a.clone()], RatingChange { stars: Some(4), ..Default::default() }).unwrap();
+        ratings.change(&[b.clone()], RatingChange { stars: Some(1), ..Default::default() }).unwrap();
+        ratings.flush(Duration::from_secs(5));
+        ratings.moved(&[(a.clone(), b.clone()), (b.clone(), a.clone())]).unwrap();
+        assert_eq!((ratings.get(&a).stars, ratings.get(&b).stars), (1, 4), "each its own");
+        ratings.moved(&[(c.clone(), a.clone())]).unwrap();
+        assert_eq!(ratings.get(&a), Rating::default(), "no old entry carried over");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
