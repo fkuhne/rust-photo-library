@@ -18,6 +18,7 @@
 use std::path::Path;
 
 use image::{DynamicImage, GrayImage, ImageFormat, RgbaImage};
+use serde::{Deserialize, Serialize};
 
 use crate::clipping::{black_of, colours_of, sensor_for, Sensor};
 use crate::photo::Orientation;
@@ -62,6 +63,159 @@ impl Level {
             Level::High => "high",
         }
     }
+}
+
+/// Where the camera focused, as it records it (the library's step 2.16, record 0021): a box in
+/// fractions of the upright image, its middle and its size.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Whether the photo is in focus inside the camera's focus point's box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Verdict {
+    /// Focus marks inside: in focus and still there.
+    InFocus,
+    /// Detail over the noise inside, none of it in focus.
+    NotInFocus,
+    /// Too little detail inside to tell, a plain wall or sky.
+    CantTell,
+}
+
+/// The box's side, as a share of the image's short side: no file read here gives its AF area's size.
+const POINT_SIDE: f64 = 0.06;
+/// In focus where at least this share of the box's pixels is marked.
+const IN_FOCUS_SHARE: f64 = 0.01;
+/// Not in focus where fewer are, but at least this share of its steps is soft detail, over the
+/// noise but no steeper close up than further out…
+const SOFT_SHARE: f64 = 0.03;
+/// …and steep steps, sharp but unmarked, as a lone straight edge or one in near-black noise, are
+/// fewer than this share of the soft ones: a box with those can't tell.
+const STEEP_OF_SOFT: f64 = 0.25;
+
+/// Where a RAW file's camera focused, from its maker notes as LibRaw reads them: Sony's
+/// `FocusLocation`, its frame's width and height and the point's x and y; Fujifilm's `FocusPixel`,
+/// over its embedded JPEG's size, as the Exif image size gives it for a RAF file; Olympus's
+/// `AFPointSelected`, a box in shares of the frame. Turned as the photo is. `None` where none is
+/// recorded, zeros or a point outside its frame; and for every other maker, until their blocks are
+/// read (PhotoMatch's step 2.81).
+pub fn point(path: &Path) -> Result<Option<Point>, Problem> {
+    let mut image = raw::open(path)?;
+    let ptr: *mut rsraw_sys::libraw_data_t = image.as_mut();
+    // SAFETY: LibRaw's own data, opened, read only here.
+    let data: &rsraw_sys::libraw_data_t = unsafe { &*ptr };
+    let make: String = data.idata.make.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
+    let notes = &data.makernotes;
+    // The point in shares of the frame as the sensor sees it, and that frame's width over height.
+    let sensor = if make.starts_with("Sony") {
+        let [w, h, x, y] = notes.sony.FocusLocation.map(f64::from);
+        (w > 0.0 && h > 0.0 && (x, y) != (0.0, 0.0) && x <= w && y <= h).then_some((x / w, y / h, w / h))
+    } else if make.starts_with("Fujifilm") || make.starts_with("FUJIFILM") {
+        let [x, y] = notes.fuji.FocusPixel.map(f64::from);
+        let (tw, th) = (data.thumbnail.twidth as f64, data.thumbnail.theight as f64);
+        let (w, h) = (tw.max(th), tw.min(th));
+        (w > 0.0 && h > 0.0 && (x, y) != (0.0, 0.0) && x <= w && y <= h).then_some((x / w, y / h, w / h))
+    } else if make.starts_with("Olympus") || make.starts_with("OM ") || make.starts_with("OM Digital") {
+        let [_, x1, y1, x2, y2] = notes.olympus.AFPointSelected;
+        let (x, y) = ((x1 + x2) / 2.0, (y1 + y2) / 2.0);
+        let (w, h) = (data.sizes.width as f64, data.sizes.height as f64);
+        ((x, y) != (0.0, 0.0) && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y) && h > 0.0).then_some((x, y, w / h))
+    } else {
+        None
+    };
+    Ok(sensor.map(|(x, y, aspect)| upright_point(x, y, aspect, data.sizes.flip)))
+}
+
+/// A point at `x`, `y` of a frame `aspect` wide over high, as the sensor sees it, as a box in the
+/// upright image, turned as LibRaw's `flip` says: 3 half round, 5 a quarter left, 6 a quarter right.
+fn upright_point(x: f64, y: f64, aspect: f64, flip: i32) -> Point {
+    let ((ux, uy), aspect) = match flip {
+        3 => ((1.0 - x, 1.0 - y), aspect),
+        5 => ((y, 1.0 - x), 1.0 / aspect),
+        6 => ((1.0 - y, x), 1.0 / aspect),
+        _ => ((x, y), aspect),
+    };
+    // A square, its side a share of the short side.
+    let (width, height) = if aspect >= 1.0 { (POINT_SIDE / aspect, POINT_SIDE) } else { (POINT_SIDE, POINT_SIDE * aspect) };
+    Point { x: ux, y: uy, width, height }
+}
+
+/// The box as the sensor sees it, from its upright fractions: the turn undone.
+fn sensor_box(point: &Point, flip: i32) -> (f64, f64, f64, f64) {
+    let (x, y, w, h) = (point.x, point.y, point.width, point.height);
+    match flip {
+        3 => (1.0 - x, 1.0 - y, w, h),
+        5 => (1.0 - y, x, h, w),
+        6 => (y, 1.0 - x, h, w),
+        _ => (x, y, w, h),
+    }
+}
+
+/// Whether a RAW file is in focus inside the box `point`, at `level`, as its focus marks for an
+/// image shown at `shown` say.
+pub fn judge_raw(path: &Path, shown: (u32, u32), level: Level, point: &Point) -> Result<Verdict, Problem> {
+    let mut image = raw::open(path)?;
+    image.unpack().map_err(|e| Problem::DevelopFailed { cause: format!("LibRaw can't read the RAW data of {}: {e}", path.display()) })?;
+    let ptr: *mut rsraw_sys::libraw_data_t = image.as_mut();
+    let colours = colours_of(ptr);
+    // SAFETY: as in `of_raw`.
+    let data: &rsraw_sys::libraw_data_t = unsafe { &*ptr };
+    let Sensor { area, out, .. } = sensor_for(data, shown)?;
+    let plane = plane_of_raw(data, &colours, area).ok_or_else(|| Problem::DevelopFailed { cause: format!("{} has no RAW data PhotoMatch can read for focus", path.display()) })?;
+    Ok(verdict(&plane, (out.0.max(1) as usize, out.1.max(1) as usize), level, sensor_box(point, data.sizes.flip)))
+}
+
+/// Whether the plane is in focus inside the box, its middle and size in shares of the frame: in
+/// focus where enough of its pixels are marked, at an image of `out`; not in focus only where its
+/// detail is plainly soft, over the noise but no steeper close up than further out, and few of its
+/// steps are steep; else it can't tell, as for a plain part, a lone straight edge the crossing rule
+/// leaves unmarked, or detail lost in near-black noise.
+fn verdict(plane: &Plane, out: (usize, usize), level: Level, (x, y, w, h): (f64, f64, f64, f64)) -> Verdict {
+    let marks = marks_at(plane, out, level);
+    let span = |middle: f64, size: f64, n: usize| {
+        let from = (((middle - size / 2.0) * n as f64).floor().max(0.0) as usize).min(n.saturating_sub(1));
+        let to = (((middle + size / 2.0) * n as f64).ceil() as usize).clamp(from + 1, n);
+        from..to
+    };
+    let (xs, ys) = (span(x, w, out.0), span(y, h, out.1));
+    let inside = xs.len() * ys.len();
+    let marked = ys.clone().flat_map(|row| xs.clone().map(move |col| row * out.0 + col)).filter(|i| marks.sharp[*i]).count();
+    if inside > 0 && marked as f64 >= IN_FOCUS_SHARE * inside as f64 {
+        return Verdict::InFocus;
+    }
+    // Each step's detail over the noise of its brightness, across and down: steep, as a sharp
+    // edge's, or soft, no steeper close up than three steps out.
+    let (pw, ph) = (plane.width, plane.height);
+    let (noise, _) = noise_of(plane);
+    let thresholds = noise.map(|n| (n * level.factor()).max(plane.least));
+    let steepness = level.steepness();
+    let v = &plane.values;
+    let (pxs, pys) = (span(x, w, pw), span(y, h, ph));
+    let (mut soft, mut steep, mut steps) = (0usize, 0usize, 0usize);
+    for py in pys.filter(|py| (3..ph.saturating_sub(3)).contains(py)) {
+        for px in pxs.clone().filter(|px| (3..pw.saturating_sub(3)).contains(px)) {
+            let i = py * pw + px;
+            steps += 1;
+            let threshold = thresholds[band_of(plane, v[i])];
+            let look = |a: f32, b: f32, far_a: f32, far_b: f32| {
+                let (close, far) = ((b - a).abs() / 2.0, (far_b - far_a).abs() / 6.0);
+                (close > threshold, close - far > threshold && close > steepness * far)
+            };
+            let (across, down) = (look(v[i - 1], v[i + 1], v[i - 3], v[i + 3]), look(v[i - pw], v[i + pw], v[i - 3 * pw], v[i + 3 * pw]));
+            if across.1 || down.1 {
+                steep += 1;
+            } else if across.0 || down.0 {
+                soft += 1;
+            }
+        }
+    }
+    let plainly_soft = steps > 0 && soft as f64 >= SOFT_SHARE * steps as f64 && (steep as f64) < STEEP_OF_SOFT * soft as f64;
+    if plainly_soft { Verdict::NotInFocus } else { Verdict::CantTell }
 }
 
 /// The median size of a normal value, as a share of its spread: Φ⁻¹(0.75).
@@ -644,6 +798,43 @@ mod tests {
                 assert_eq!(larger.sharp[y * SIZE * 2 + x], own.sharp[(y / 2) * SIZE + x / 2], "at {x}, {y}");
             }
         }
+    }
+
+    #[test]
+    fn a_point_turns_as_the_photo_does_and_its_box_is_square() {
+        let p = upright_point(0.25, 0.75, 1.5, 0);
+        assert_eq!((p.x, p.y), (0.25, 0.75));
+        assert!((p.width * 1.5 - p.height).abs() < 1e-9, "square on a 3:2 frame: {p:?}");
+        let left = upright_point(0.25, 0.75, 1.5, 5);
+        assert_eq!((left.x, left.y), (0.75, 0.75), "a quarter left");
+        let right = upright_point(0.25, 0.75, 1.5, 6);
+        assert_eq!((right.x, right.y), (0.25, 0.25), "a quarter right");
+        let half = upright_point(0.25, 0.75, 1.5, 3);
+        assert_eq!((half.x, half.y), (0.75, 0.25));
+        for flip in [0, 3, 5, 6] {
+            let turned = upright_point(0.25, 0.75, 1.5, flip);
+            let (x, y, _, _) = sensor_box(&turned, flip);
+            assert!((x - 0.25).abs() < 1e-9 && (y - 0.75).abs() < 1e-9, "undone, flip {flip}: {x}, {y}");
+        }
+    }
+
+    #[test]
+    fn the_verdict_is_in_focus_on_sharp_edges_not_on_blurred_ones_and_can_t_tell_on_a_plain_part() {
+        // A box over an edge of the squares, at 25, 25 of 200.
+        let on_edge = (25.0 / SIZE as f64, 25.0 / SIZE as f64, 0.06, 0.06);
+        assert_eq!(verdict(&squares(30.0, 0.0, 0.5), (SIZE, SIZE), Level::Mid, on_edge), Verdict::InFocus);
+        assert_eq!(verdict(&squares(30.0, 3.0, 0.5), (SIZE, SIZE), Level::Mid, on_edge), Verdict::NotInFocus);
+        assert_eq!(verdict(&squares(0.0, 0.0, 0.5), (SIZE, SIZE), Level::Mid, on_edge), Verdict::CantTell);
+    }
+
+    #[test]
+    fn a_lone_sharp_edge_the_marks_leave_out_can_t_tell_rather_than_not_in_focus() {
+        // Left half dark, right half light: one straight sharp edge down the middle, nothing
+        // crossing it, which the crossing rule leaves unmarked.
+        let mut noise = Noise(3);
+        let values: Vec<f32> = (0..SIZE * SIZE).map(|i| if i % SIZE < SIZE / 2 { 40.0 } else { 70.0 } + 0.5 * noise.normal()).collect();
+        let plane = Plane { width: SIZE, height: SIZE, values, range: 128.0, least: 128.0 * LEAST_DETAIL };
+        assert_eq!(verdict(&plane, (SIZE, SIZE), Level::Mid, (0.5, 0.5, 0.06, 0.06)), Verdict::CantTell);
     }
 
     #[test]

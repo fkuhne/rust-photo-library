@@ -284,6 +284,36 @@ impl ThumbCache {
         std::fs::read(self.dir.join(focus_name(path, shown, level, colour).ok()?)).ok()
     }
 
+    /// Where the camera focused, and whether the photo is in focus there, at `level`, for an image
+    /// shown at `shown` (the library's step 2.16, record 0021): `None` where the file records no
+    /// point. RAW files only. Made once and kept.
+    pub fn focus_point(&self, path: &Path, shown: (u32, u32), level: crate::focus::Level) -> Result<Option<(crate::focus::Point, crate::focus::Verdict)>, Problem> {
+        let name = focus_point_name(path, shown, level)?;
+        let _turn = self.turn(name.clone())?;
+        if let Some(kept) = std::fs::read(self.dir.join(&name)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()) {
+            return Ok(kept);
+        }
+        let found = if crate::raw::is_raw(path) {
+            match crate::focus::point(path)? {
+                Some(point) => Some((point, crate::focus::judge_raw(path, shown, level, &point)?)),
+                None => None,
+            }
+        } else {
+            None
+        };
+        if let Ok(bytes) = serde_json::to_vec(&found) {
+            self.keep(&name, &bytes);
+        }
+        Ok(found)
+    }
+
+    /// The focus point and its verdict if they're judged already, without judging them: `Some(None)`
+    /// for a file known to record none.
+    pub fn cached_focus_point(&self, path: &Path, shown: (u32, u32), level: crate::focus::Level) -> Option<Option<(crate::focus::Point, crate::focus::Verdict)>> {
+        let bytes = std::fs::read(self.dir.join(focus_point_name(path, shown, level).ok()?)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
     /// The clipping marks of `path` at `shown` if they're made, without making them.
     pub fn cached_clipping(&self, path: &Path, shown: (u32, u32)) -> Option<Vec<u8>> {
         std::fs::read(self.dir.join(clipping_name(path, shown).ok()?)).ok()
@@ -488,6 +518,13 @@ const FOCUS_VERSION: u32 = 3;
 fn focus_name(path: &Path, shown: (u32, u32), level: crate::focus::Level, colour: [u8; 3]) -> Result<String, Problem> {
     let [r, g, b] = colour;
     Ok(format!("{}-focus-v{FOCUS_VERSION}-{}-{r:02x}{g:02x}{b:02x}-{}x{}.png", cache_key(path)?, level.name(), shown.0, shown.1))
+}
+
+/// The version of the focus point's verdict, as `FOCUS_VERSION`.
+const FOCUS_POINT_VERSION: u32 = 1;
+
+fn focus_point_name(path: &Path, shown: (u32, u32), level: crate::focus::Level) -> Result<String, Problem> {
+    Ok(format!("{}-fpoint-v{FOCUS_POINT_VERSION}-{}-{}x{}.json", cache_key(path)?, level.name(), shown.0, shown.1))
 }
 
 /// The name a photo's full size is kept under. Ending in `-full.jpg`, as `trim_full` looks for, so
