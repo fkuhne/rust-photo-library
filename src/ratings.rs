@@ -512,6 +512,10 @@ impl Ratings {
         let mut written = 0;
         for photo in photos {
             let Ok(_io) = self.sidecar_io.lock() else { break };
+            // Never a sidecar beside no photo: one gone since its rating changed is left.
+            if !photo.is_file() {
+                continue;
+            }
             let path = sidecar::path_for(photo);
             let entry = self.entries.lock().ok().and_then(|m| m.get(photo).cloned()).unwrap_or_default();
             if sidecar::stamp(&path).is_some_and(|stamp| entry.behind(stamp)) {
@@ -551,7 +555,8 @@ impl Ratings {
         let mut synced = Synced::default();
         let mut to_write = Vec::new();
         for (i, photo) in photos.iter().enumerate() {
-            if !sidecar::has_sidecar(photo) {
+            // A photo gone, to the Trash or by another app, gets no sidecar beside no photo.
+            if !sidecar::has_sidecar(photo) || !photo.is_file() {
                 continue;
             }
             let Ok(_io) = self.sidecar_io.lock() else { break };
@@ -869,6 +874,27 @@ mod tests {
     fn set_writable(dir: &Path, writable: bool) {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(dir, std::fs::Permissions::from_mode(if writable { 0o755 } else { 0o555 })).unwrap();
+    }
+
+    /// A photo gone, to the Trash or by another app, its sidecar with it, gets no sidecar back:
+    /// a sync never writes one beside no photo.
+    #[test]
+    fn a_photo_gone_gets_no_sidecar_back() {
+        let dir = temp_folder("sidecar-gone");
+        let raw = dir.join("DSC1.ARW");
+        std::fs::write(&raw, b"a photo").unwrap();
+        let data = temp_folder("sidecar-gone-data");
+        let ratings = Ratings::open(data.join("ratings.json"));
+        ratings.change(&[raw.clone()], picked(3)).unwrap();
+        ratings.flush(Duration::from_secs(5));
+        assert!(dir.join("DSC1.xmp").is_file());
+
+        std::fs::remove_file(&raw).unwrap();
+        std::fs::remove_file(dir.join("DSC1.xmp")).unwrap();
+        assert_eq!(ratings.sync(&[raw.clone()]).written, 0);
+        assert!(!dir.join("DSC1.xmp").exists(), "no sidecar beside no photo");
+        std::fs::remove_dir_all(dir).unwrap();
+        std::fs::remove_dir_all(data).unwrap();
     }
 
     #[cfg(unix)]
