@@ -1,6 +1,6 @@
 # 0018. Focus peaking marks from the RAW data: fine detail over the photo's own noise
 
-- Status: Accepted
+- Status: Accepted; its marks of every sharp step, and its smallest detail in an image file, superseded by [0019](0019-focus-marks-only-where-sharp-detail-crosses-a-blur-of-motion-left-out.md)
 - Date: 2026-11-26
 
 ## Context
@@ -52,6 +52,10 @@ What was known on 2026-11-26:
 - [x] A synthetic sharp edge marks, the same edge blurred and plain noise don't, nor a hot photosite, nor the shadows' own noise, nor a soft edge of high contrast in a clean photo: 12 tests.
 - [x] The time a photo takes, over the samples: RAW files 57 ms to 1.1 s at a large view 2,560 across, the X-Trans ones and the α7 IV's the slowest, mostly LibRaw's unpacking; image files 6 to 50 ms. The Nikon Z 8's LibRaw can't unpack.
 - [ ] A high-ISO photo's noise isn't marked: the owner's look.
+
+## Why it was superseded, in part
+
+On 2026-11-26 the owner found a train's blur of motion marked as sharp, and asked for focus, not sharpness. Record [0019](0019-focus-marks-only-where-sharp-detail-crosses-a-blur-of-motion-left-out.md) keeps a sharp step only where sharp detail crosses around it, and asks more of an image file's smallest detail. The rest of this record holds.
 
 ## Sources
 

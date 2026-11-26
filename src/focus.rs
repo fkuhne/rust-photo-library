@@ -9,7 +9,10 @@
 //! further out, a soft one isn't. A step is sharp where the close slope is steeper by a share, so
 //! that a soft edge of high contrast doesn't count, and steeper by more than the photo's own noise
 //! times the level's factor, so that its noise doesn't; and where the step beside it along the
-//! edge is too, so that a hot photosite or a grain of noise doesn't. The marks are made at the size of the image they go over,
+//! edge is too, so that a hot photosite or a grain of noise doesn't. And as focus, not sharpness,
+//! is the question (the library's step 2.14, record 0019): sharp steps stand only where, around
+//! them, sharp detail runs both across and down, as out-of-focus blur spreads every way and a blur
+//! of motion leaves crisp streaks one way only. The marks are made at the size of the image they go over,
 //! upright, each pixel sharp where any step of the sensor under it is.
 
 use std::path::Path;
@@ -68,12 +71,24 @@ const MEDIAN_OF_SIZE: f32 = 0.67449;
 /// that its noise is next to nothing.
 const LEAST_DETAIL: f32 = 0.004;
 
+/// An image file's smallest detail, in its 255 levels: compression flattens its noise, which then
+/// can't tell its own edges, 8 by 8 pixels, from a photo's.
+const LEAST_IN_IMAGE: f32 = 3.0;
+
+/// Sharpness is judged in blocks of this many steps a side: a block's marks stand only where its
+/// sharp steps run both across and down, the fewer at least `CROSSING` of the more. A blur of
+/// motion leaves crisp edges along the motion and none across it; a subject in focus has both.
+const AREA: usize = 32;
+const CROSSING: f32 = 0.2;
+
 /// A brightness for each step, row by row, and its range, from black to the white level.
 pub(crate) struct Plane {
     pub width: usize,
     pub height: usize,
     pub values: Vec<f32>,
     pub range: f32,
+    /// The smallest detail that counts, in its values.
+    pub least: f32,
 }
 
 /// Whether each pixel of the image shown, upright, row by row, is sharp.
@@ -196,7 +211,7 @@ fn plane_of_raw(data: &rsraw_sys::libraw_data_t, colours: &[[usize; 6]; 24], are
                 values[by * width + b] = brightness(sum, count).sqrt();
             }
         }
-        Some(Plane { width, height, values, range })
+        Some(Plane { width, height, values, range, least: range * LEAST_DETAIL })
     } else if !rawdata.color4_image.is_null() || !rawdata.color3_image.is_null() {
         // Already a colour for each pixel, as a Sony pixel-shift ARQ or a linear DNG.
         let components = if rawdata.color4_image.is_null() { 3 } else { 4 };
@@ -223,7 +238,7 @@ fn plane_of_raw(data: &rsraw_sys::libraw_data_t, colours: &[[usize; 6]; 24], are
                 values[r * aw + c] = brightness(&sum, &[1, 1, 1]).sqrt();
             }
         }
-        Some(Plane { width: aw, height: ah, values, range })
+        Some(Plane { width: aw, height: ah, values, range, least: range * LEAST_DETAIL })
     } else {
         None
     }
@@ -249,7 +264,7 @@ pub fn of_image(image: &DynamicImage, shown: (u32, u32), level: Level) -> Marks 
     let rgb = image.to_rgb8();
     let (width, height) = (rgb.width() as usize, rgb.height() as usize);
     let values = rgb.pixels().map(|p| (p.0[0] as f32 + 2.0 * p.0[1] as f32 + p.0[2] as f32) / 4.0).collect();
-    let plane = Plane { width, height, values, range: 255.0 };
+    let plane = Plane { width, height, values, range: 255.0, least: LEAST_IN_IMAGE };
     let out = (shown.0.max(1) as usize, shown.1.max(1) as usize);
     if width < 8 || height < 8 {
         return Marks { width: out.0 as u32, height: out.1 as u32, sharp: vec![false; out.0 * out.1] };
@@ -339,7 +354,7 @@ pub(crate) fn detect(plane: &Plane, out: (usize, usize), level: Level) -> Vec<bo
     let (w, h) = (plane.width, plane.height);
     let v = &plane.values;
     let (noise, _) = noise_of(plane);
-    let thresholds = noise.map(|n| (n * level.factor()).max(plane.range * LEAST_DETAIL));
+    let thresholds = noise.map(|n| (n * level.factor()).max(plane.least));
     let steepness = level.steepness();
     // The slope over one step either side against that over three: sharp where the brightness
     // changes faster close up than further out, by a share, and by more than the noise of the
@@ -358,17 +373,49 @@ pub(crate) fn detect(plane: &Plane, out: (usize, usize), level: Level) -> Vec<bo
             down[i] = fine(v[i - w], v[i + w], v[i - 3 * w], v[i + 3 * w]);
         }
     }
-    let mut sharp = vec![false; out.0 * out.1];
-    let column_out: Vec<usize> = (0..w).map(|x| x * out.0 / w).collect();
+    // An edge across runs down: the row above or below passes too, beside it or one over.
+    let mut edges = vec![0u8; w * h];
     for y in 4..h.saturating_sub(4) {
-        let row_out = y * out.1 / h;
         for x in 4..w.saturating_sub(4) {
             let i = y * w + x;
-            // An edge across runs down: the row above or below passes too, beside it or one over.
             let edge_across = across[i] && (x - 1..=x + 1).any(|n| across[i - w - x + n] || across[i + w - x + n]);
             let edge_down = down[i] && (y - 1..=y + 1).any(|n| down[n * w + x - 1] || down[n * w + x + 1]);
-            if edge_across || edge_down {
-                sharp[row_out * out.0 + column_out[x]] = true;
+            edges[i] = edge_across as u8 | (edge_down as u8) << 1;
+        }
+    }
+    // Each block's edges stand where they and its neighbours' run both ways enough, not one way
+    // only, as motion's do over a whole moving part of the photo.
+    let (bw, bh) = (w.div_ceil(AREA), h.div_ceil(AREA));
+    let mut counts = vec![(0usize, 0usize); bw * bh];
+    for y in 0..h {
+        for x in 0..w {
+            let count = &mut counts[(y / AREA) * bw + x / AREA];
+            count.0 += (edges[y * w + x] & 1) as usize;
+            count.1 += (edges[y * w + x] >> 1) as usize;
+        }
+    }
+    let mut sharp = vec![false; out.0 * out.1];
+    let column_out: Vec<usize> = (0..w).map(|x| x * out.0 / w).collect();
+    for by in 0..bh {
+        for bx in 0..bw {
+            let (ys, xs) = (by * AREA..((by + 1) * AREA).min(h), bx * AREA..((bx + 1) * AREA).min(w));
+            let (mut across_n, mut down_n) = (0usize, 0usize);
+            for ny in by.saturating_sub(1)..(by + 2).min(bh) {
+                for nx in bx.saturating_sub(1)..(bx + 2).min(bw) {
+                    across_n += counts[ny * bw + nx].0;
+                    down_n += counts[ny * bw + nx].1;
+                }
+            }
+            if (across_n.min(down_n) as f32) < CROSSING * across_n.max(down_n) as f32 {
+                continue;
+            }
+            for y in ys.clone() {
+                let row_out = y * out.1 / h;
+                for x in xs.clone() {
+                    if edges[y * w + x] != 0 {
+                        sharp[row_out * out.0 + column_out[x]] = true;
+                    }
+                }
             }
         }
     }
@@ -409,7 +456,7 @@ mod tests {
         for value in &mut values {
             *value += sigma * noise.normal();
         }
-        Plane { width: SIZE, height: SIZE, values, range: 128.0 }
+        Plane { width: SIZE, height: SIZE, values, range: 128.0, least: 128.0 * LEAST_DETAIL }
     }
 
     /// A Gaussian blur of spread `sigma`, across then down.
@@ -461,8 +508,9 @@ mod tests {
         let sharp = share(&squares(30.0, 0.0, 0.5), Level::Mid);
         let soft = share(&squares(30.0, 2.5, 0.5), Level::Mid);
         let noise = share(&squares(0.0, 0.0, 0.5), Level::High);
-        // Squares of 25 have an edge every 25 steps, across and down: about 2 × 2 / 25 of the steps.
-        assert!(sharp > 0.08, "the sharp edges mark: {sharp}");
+        // Squares of 25 have an edge every 25 steps, across and down: about 2 × 2 / 25 of the steps,
+        // a few lost where a straight edge has no other near it.
+        assert!(sharp > 0.06, "the sharp edges mark: {sharp}");
         assert!(soft < sharp / 20.0, "blurred by 2.5 steps, they don't: {soft} against {sharp}");
         assert_eq!(noise, 0.0, "noise alone never marks, even at High");
     }
@@ -482,7 +530,7 @@ mod tests {
         let soft = share(&squares(100.0, 2.0, 0.05), Level::High);
         let sharp = share(&squares(100.0, 0.0, 0.05), Level::Mid);
         assert!(soft < 0.002, "{soft}");
-        assert!(sharp > 0.08, "{sharp}");
+        assert!(sharp > 0.06, "{sharp}");
     }
 
     #[test]
@@ -503,6 +551,36 @@ mod tests {
         assert!(in_light > SIZE * SIZE / 40, "the light's sharp edges still mark: {in_light}");
         let (bands, _) = noise_of(&plane);
         assert!(bands[band_of(&plane, 8.0)] > 2.5, "the shadows' band has its own noise: {:?}", bands);
+    }
+
+    /// A texture of random brightnesses, blurred across by `along` steps as a blur of motion does, its
+    /// detail down left crisp, with noise of spread `sigma`.
+    fn texture(along: usize, sigma: f32) -> Plane {
+        let mut noise = Noise(42);
+        // Patches of 4 by 4 steps, each its own brightness, as a fine texture.
+        let patch: Vec<f32> = (0..(SIZE / 4) * (SIZE / 4)).map(|_| 40.0 + 30.0 * noise.uniform()).collect();
+        let mut values: Vec<f32> = (0..SIZE * SIZE).map(|i| patch[(i / SIZE / 4) * (SIZE / 4) + i % SIZE / 4]).collect();
+        if along > 1 {
+            let row: Vec<f32> = values.clone();
+            for y in 0..SIZE {
+                for x in 0..SIZE {
+                    let (from, to) = (x.saturating_sub(along / 2), (x + along / 2).min(SIZE - 1));
+                    values[y * SIZE + x] = row[y * SIZE + from..=y * SIZE + to].iter().sum::<f32>() / (to - from + 1) as f32;
+                }
+            }
+        }
+        for value in &mut values {
+            *value += sigma * noise.normal();
+        }
+        Plane { width: SIZE, height: SIZE, values, range: 128.0, least: 128.0 * LEAST_DETAIL }
+    }
+
+    #[test]
+    fn a_texture_in_focus_marks_and_the_same_blurred_by_motion_doesn_t() {
+        let still = share(&texture(0, 0.5), Level::Mid);
+        let moving = share(&texture(15, 0.5), Level::High);
+        assert!(still > 0.1, "in focus and still: {still}");
+        assert!(moving < still / 20.0, "blurred across by 15 steps, its crisp streaks down don't count: {moving} against {still}");
     }
 
     #[test]

@@ -481,8 +481,9 @@ fn clipping_name(path: &Path, shown: (u32, u32)) -> Result<String, Problem> {
     Ok(format!("{}-clip-v{CLIPPING_VERSION}-{}x{}.png", cache_key(path)?, shown.0, shown.1))
 }
 
-/// The version of the focus marks, in the names they're kept under, as `CLIPPING_VERSION`.
-const FOCUS_VERSION: u32 = 1;
+/// The version of the focus marks, in the names they're kept under, as `CLIPPING_VERSION`: 2 since
+/// they judge focus, not sharpness (record 0019).
+const FOCUS_VERSION: u32 = 2;
 
 fn focus_name(path: &Path, shown: (u32, u32), level: crate::focus::Level, colour: [u8; 3]) -> Result<String, Problem> {
     let [r, g, b] = colour;
