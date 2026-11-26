@@ -1,6 +1,6 @@
 # 0019. Focus marks only where sharp detail crosses: a blur of motion left out
 
-- Status: Accepted
+- Status: Accepted; its blocks of 32 steps superseded by [0020](0020-focus-marks-judged-around-each-spot-not-in-fixed-blocks.md)
 - Date: 2026-11-26
 - Supersedes, in part: [0018](0018-focus-peaking-marks-from-the-raw-data-fine-detail-over-the-photo-s-own-noise.md), its marks of every sharp step, and its smallest detail in an image file
 
@@ -49,6 +49,10 @@ What was found on 2026-11-26:
 
 - [x] The train's streaks aren't marked, and the samples' subjects still are: the table above, looked at over the photos.
 - [ ] The owner's photos with motion, and with gentle outlines in focus, look right: the owner's look.
+
+## Why it was superseded, in part
+
+On 2026-11-26 the owner saw the marks in patches: kept or dropped a block at a time, they stopped along the blocks' straight edges. Record [0020](0020-focus-marks-judged-around-each-spot-not-in-fixed-blocks.md) judges each small cell by the window around it. The rule itself, crossing detail around a sharp step, holds.
 
 ## Sources
 

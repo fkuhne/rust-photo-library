@@ -39,4 +39,5 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0016](0016-photos-moved-or-copied-with-their-companion-and-sidecar-never-over-a-file-and-moved-back.md) | Photos moved or copied with their companion and sidecar, never over a file, and moved back | Accepted | 2026-11-24 |
 | [0017](0017-photos-renamed-with-their-companion-and-sidecar-in-an-order-that-frees-each-name-never-over-a-file.md) | Photos renamed with their companion and sidecar, in an order that frees each name, never over a file | Accepted | 2026-11-24 |
 | [0018](0018-focus-peaking-marks-from-the-raw-data-fine-detail-over-the-photo-s-own-noise.md) | Focus peaking marks from the RAW data: fine detail over the photo's own noise | Accepted; superseded in part by 0019 | 2026-11-26 |
-| [0019](0019-focus-marks-only-where-sharp-detail-crosses-a-blur-of-motion-left-out.md) | Focus marks only where sharp detail crosses: a blur of motion left out | Accepted | 2026-11-26 |
+| [0019](0019-focus-marks-only-where-sharp-detail-crosses-a-blur-of-motion-left-out.md) | Focus marks only where sharp detail crosses: a blur of motion left out | Accepted; superseded in part by 0020 | 2026-11-26 |
+| [0020](0020-focus-marks-judged-around-each-spot-not-in-fixed-blocks.md) | Focus marks judged around each spot, not in fixed blocks | Accepted | 2026-11-26 |

@@ -75,10 +75,13 @@ const LEAST_DETAIL: f32 = 0.004;
 /// can't tell its own edges, 8 by 8 pixels, from a photo's.
 const LEAST_IN_IMAGE: f32 = 3.0;
 
-/// Sharpness is judged in blocks of this many steps a side: a block's marks stand only where its
-/// sharp steps run both across and down, the fewer at least `CROSSING` of the more. A blur of
-/// motion leaves crisp edges along the motion and none across it; a subject in focus has both.
-const AREA: usize = 32;
+/// Sharpness is judged around each step: a step's mark stands only where, within `REACH` cells of
+/// `CELL` steps every way of its own, about 96 steps a side, sharp steps run both across and down,
+/// the fewer at least `CROSSING` of the more. A blur of motion leaves crisp edges along the motion
+/// and none across it; a subject in focus has both. Judged around each cell, not in fixed blocks,
+/// so that the marks don't stop along a block's straight edge.
+const CELL: usize = 4;
+const REACH: usize = 12;
 const CROSSING: f32 = 0.2;
 
 /// A brightness for each step, row by row, and its range, from black to the white level.
@@ -383,39 +386,45 @@ pub(crate) fn detect(plane: &Plane, out: (usize, usize), level: Level) -> Vec<bo
             edges[i] = edge_across as u8 | (edge_down as u8) << 1;
         }
     }
-    // Each block's edges stand where they and its neighbours' run both ways enough, not one way
-    // only, as motion's do over a whole moving part of the photo.
-    let (bw, bh) = (w.div_ceil(AREA), h.div_ceil(AREA));
-    let mut counts = vec![(0usize, 0usize); bw * bh];
+    // Each cell's sharp steps, across and down, then the window around each cell, by sums over
+    // the cells, judged both ways: not one way only, as motion's are over a whole moving part.
+    let (cw, ch) = (w.div_ceil(CELL), h.div_ceil(CELL));
+    let mut counts = vec![[0u32; 2]; cw * ch];
     for y in 0..h {
         for x in 0..w {
-            let count = &mut counts[(y / AREA) * bw + x / AREA];
-            count.0 += (edges[y * w + x] & 1) as usize;
-            count.1 += (edges[y * w + x] >> 1) as usize;
+            let e = edges[y * w + x];
+            if e != 0 {
+                let count = &mut counts[(y / CELL) * cw + x / CELL];
+                count[0] += (e & 1) as u32;
+                count[1] += (e >> 1) as u32;
+            }
         }
     }
+    // Sums from the top left, a row and a column of nothing first.
+    let mut sums = vec![[0u32; 2]; (cw + 1) * (ch + 1)];
+    for cy in 0..ch {
+        for cx in 0..cw {
+            for k in 0..2 {
+                sums[(cy + 1) * (cw + 1) + cx + 1][k] = counts[cy * cw + cx][k] + sums[cy * (cw + 1) + cx + 1][k] + sums[(cy + 1) * (cw + 1) + cx][k] - sums[cy * (cw + 1) + cx][k];
+            }
+        }
+    }
+    let crossing: Vec<bool> = (0..cw * ch)
+        .map(|i| {
+            let (cx, cy) = (i % cw, i / cw);
+            let (x0, y0, x1, y1) = (cx.saturating_sub(REACH), cy.saturating_sub(REACH), (cx + REACH + 1).min(cw), (cy + REACH + 1).min(ch));
+            let window = |k: usize| sums[y1 * (cw + 1) + x1][k] + sums[y0 * (cw + 1) + x0][k] - sums[y0 * (cw + 1) + x1][k] - sums[y1 * (cw + 1) + x0][k];
+            let (across_n, down_n) = (window(0) as f32, window(1) as f32);
+            across_n.min(down_n) >= CROSSING * across_n.max(down_n)
+        })
+        .collect();
     let mut sharp = vec![false; out.0 * out.1];
     let column_out: Vec<usize> = (0..w).map(|x| x * out.0 / w).collect();
-    for by in 0..bh {
-        for bx in 0..bw {
-            let (ys, xs) = (by * AREA..((by + 1) * AREA).min(h), bx * AREA..((bx + 1) * AREA).min(w));
-            let (mut across_n, mut down_n) = (0usize, 0usize);
-            for ny in by.saturating_sub(1)..(by + 2).min(bh) {
-                for nx in bx.saturating_sub(1)..(bx + 2).min(bw) {
-                    across_n += counts[ny * bw + nx].0;
-                    down_n += counts[ny * bw + nx].1;
-                }
-            }
-            if (across_n.min(down_n) as f32) < CROSSING * across_n.max(down_n) as f32 {
-                continue;
-            }
-            for y in ys.clone() {
-                let row_out = y * out.1 / h;
-                for x in xs.clone() {
-                    if edges[y * w + x] != 0 {
-                        sharp[row_out * out.0 + column_out[x]] = true;
-                    }
-                }
+    for y in 0..h {
+        let row_out = y * out.1 / h;
+        for x in 0..w {
+            if edges[y * w + x] != 0 && crossing[(y / CELL) * cw + x / CELL] {
+                sharp[row_out * out.0 + column_out[x]] = true;
             }
         }
     }
