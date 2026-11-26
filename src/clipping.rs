@@ -88,46 +88,17 @@ pub fn of_raw(path: &Path, shown: (u32, u32)) -> Result<Marks, Problem> {
     let mut image = raw::open(path)?;
     image.unpack().map_err(|e| Problem::DevelopFailed { cause: format!("LibRaw can't read the RAW data of {}: {e}", path.display()) })?;
     let ptr: *mut rsraw_sys::libraw_data_t = image.as_mut();
-    // Each photosite's colour, by LibRaw, which repeats within 24 rows and 6 columns for a Bayer
-    // pattern (8 by 2) and an X-Trans one (6 by 6).
-    let mut colours = [[0usize; 6]; 24];
-    for (row, line) in colours.iter_mut().enumerate() {
-        for (col, cell) in line.iter_mut().enumerate() {
-            // SAFETY: LibRaw's own data, unpacked, which it only reads here.
-            let c = unsafe { rsraw_sys::libraw_COLOR(ptr, row as i32, col as i32) };
-            *cell = c.clamp(0, 3) as usize;
-        }
-    }
+    let colours = colours_of(ptr);
     // SAFETY: `image` holds the data for the rest of this function, and nothing changes it.
     let data: &rsraw_sys::libraw_data_t = unsafe { &*ptr };
-    let orientation = raw::orientation(data.sizes.flip);
-    // The image shown, as the sensor sees it.
-    let (shown_w, shown_h) = if orientation.is_sideways() { (shown.1, shown.0) } else { shown };
-    if shown_w == 0 || shown_h == 0 {
-        return Err("no size to make the clipping marks at".to_string().into());
-    }
-    let s = &data.sizes;
-    let visible = (s.width as u32, s.height as u32);
-    let inset = &s.raw_inset_crops[0];
-    let crop = (inset.cwidth > 0 && inset.cheight > 0 && inset.cleft != u16::MAX && inset.ctop != u16::MAX).then(|| {
-        let x = (inset.cleft as u32).saturating_sub(s.left_margin as u32).min(visible.0.saturating_sub(1));
-        let y = (inset.ctop as u32).saturating_sub(s.top_margin as u32).min(visible.1.saturating_sub(1));
-        (x, y, (inset.cwidth as u32).min(visible.0 - x), (inset.cheight as u32).min(visible.1 - y))
-    });
-    let area = area_for(visible, crop, shown_w as f64 / shown_h as f64);
+    let Sensor { orientation, area, out: (shown_w, shown_h) } = sensor_for(data, shown)?;
     let out = (shown_w.min(area.2).max(1) as usize, shown_h.min(area.3).max(1) as usize);
 
     let color = &data.color;
     let white = color.maximum;
-    let pattern = (color.cblack[4] as usize, color.cblack[5] as usize);
-    let black = |channel: usize, row: usize, col: usize| -> u32 {
-        let mut level = color.black + color.cblack[channel];
-        if pattern.0 > 0 && pattern.1 > 0 && 6 + pattern.0 * pattern.1 <= color.cblack.len() {
-            level += color.cblack[6 + (row % pattern.0) * pattern.1 + col % pattern.1];
-        }
-        level
-    };
+    let black = |channel: usize, row: usize, col: usize| black_of(color, channel, row, col);
 
+    let s = &data.sizes;
     let rawdata = &data.rawdata;
     let (top, left) = (s.top_margin as usize, s.left_margin as usize);
     let (x0, y0, aw, ah) = (area.0 as usize, area.1 as usize, area.2 as usize, area.3 as usize);
@@ -175,6 +146,58 @@ pub fn of_raw(path: &Path, shown: (u32, u32)) -> Result<Marks, Problem> {
         return Err(Problem::DevelopFailed { cause: format!("{} has no RAW data PhotoMatch can read for clipping", path.display()) });
     }
     Ok(Marks { width: out.0 as u32, height: out.1 as u32, marks: marks.finish() }.upright(orientation))
+}
+
+/// Each photosite's colour, by LibRaw, which repeats within 24 rows and 6 columns for a Bayer
+/// pattern (8 by 2) and an X-Trans one (6 by 6): 0 red, 1 and 3 green, 2 blue.
+pub(crate) fn colours_of(ptr: *mut rsraw_sys::libraw_data_t) -> [[usize; 6]; 24] {
+    let mut colours = [[0usize; 6]; 24];
+    for (row, line) in colours.iter_mut().enumerate() {
+        for (col, cell) in line.iter_mut().enumerate() {
+            // SAFETY: LibRaw's own data, unpacked, which it only reads here.
+            let c = unsafe { rsraw_sys::libraw_COLOR(ptr, row as i32, col as i32) };
+            *cell = c.clamp(0, 3) as usize;
+        }
+    }
+    colours
+}
+
+/// The black level of a photosite of `channel` at `row` and `col` of the visible area.
+pub(crate) fn black_of(color: &rsraw_sys::libraw_colordata_t, channel: usize, row: usize, col: usize) -> u32 {
+    let pattern = (color.cblack[4] as usize, color.cblack[5] as usize);
+    let mut level = color.black + color.cblack[channel];
+    if pattern.0 > 0 && pattern.1 > 0 && 6 + pattern.0 * pattern.1 <= color.cblack.len() {
+        level += color.cblack[6 + (row % pattern.0) * pattern.1 + col % pattern.1];
+    }
+    level
+}
+
+/// What marks for an image shown at `shown`, upright, read of a RAW file's sensor: how the photo
+/// turns, the part of the visible area it shows, as `area_for` finds it, and the image's size as
+/// the sensor sees it.
+pub(crate) struct Sensor {
+    pub orientation: Orientation,
+    pub area: (u32, u32, u32, u32),
+    pub out: (u32, u32),
+}
+
+pub(crate) fn sensor_for(data: &rsraw_sys::libraw_data_t, shown: (u32, u32)) -> Result<Sensor, Problem> {
+    let orientation = raw::orientation(data.sizes.flip);
+    // The image shown, as the sensor sees it.
+    let (shown_w, shown_h) = if orientation.is_sideways() { (shown.1, shown.0) } else { shown };
+    if shown_w == 0 || shown_h == 0 {
+        return Err("no size to make the marks at".to_string().into());
+    }
+    let s = &data.sizes;
+    let visible = (s.width as u32, s.height as u32);
+    let inset = &s.raw_inset_crops[0];
+    let crop = (inset.cwidth > 0 && inset.cheight > 0 && inset.cleft != u16::MAX && inset.ctop != u16::MAX).then(|| {
+        let x = (inset.cleft as u32).saturating_sub(s.left_margin as u32).min(visible.0.saturating_sub(1));
+        let y = (inset.ctop as u32).saturating_sub(s.top_margin as u32).min(visible.1.saturating_sub(1));
+        (x, y, (inset.cwidth as u32).min(visible.0 - x), (inset.cheight as u32).min(visible.1 - y))
+    });
+    let area = area_for(visible, crop, shown_w as f64 / shown_h as f64);
+    Ok(Sensor { orientation, area, out: (shown_w, shown_h) })
 }
 
 /// An image file's marks, from its own pixels, upright, at `shown`.

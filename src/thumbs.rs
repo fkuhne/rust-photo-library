@@ -256,6 +256,34 @@ impl ThumbCache {
         Ok(png)
     }
 
+    /// Where the photo is sharp, as a PNG the size of the image it goes over, `shown`, upright: in
+    /// `colour` where sharp, clear elsewhere, at `level` (the library's plan step 2.13, record
+    /// 0018). From a RAW file's sensor data, never its preview; from an image file's own pixels.
+    /// Made once and kept, for each level and colour.
+    pub fn focus(&self, reader: &dyn PhotoReader, path: &Path, shown: (u32, u32), level: crate::focus::Level, colour: [u8; 3]) -> Result<Vec<u8>, Problem> {
+        let name = focus_name(path, shown, level, colour)?;
+        let _turn = self.turn(name.clone())?;
+        if let Ok(bytes) = std::fs::read(self.dir.join(&name)) {
+            return Ok(bytes);
+        }
+        let marks = if crate::raw::is_raw(path) {
+            crate::focus::of_raw(path, shown, level)?
+        } else {
+            let photo = reader.read(path, Want::Largest)?;
+            let orientation = photo.orientation;
+            let image = upright(decode(&photo.into_largest_preview()?)?, orientation);
+            crate::focus::of_image(&image, shown, level)
+        };
+        let png = marks.png(colour)?;
+        self.keep(&name, &png);
+        Ok(png)
+    }
+
+    /// The focus marks of `path` at `shown`, `level` and `colour` if they're made, without making them.
+    pub fn cached_focus(&self, path: &Path, shown: (u32, u32), level: crate::focus::Level, colour: [u8; 3]) -> Option<Vec<u8>> {
+        std::fs::read(self.dir.join(focus_name(path, shown, level, colour).ok()?)).ok()
+    }
+
     /// The clipping marks of `path` at `shown` if they're made, without making them.
     pub fn cached_clipping(&self, path: &Path, shown: (u32, u32)) -> Option<Vec<u8>> {
         std::fs::read(self.dir.join(clipping_name(path, shown).ok()?)).ok()
@@ -453,6 +481,14 @@ fn clipping_name(path: &Path, shown: (u32, u32)) -> Result<String, Problem> {
     Ok(format!("{}-clip-v{CLIPPING_VERSION}-{}x{}.png", cache_key(path)?, shown.0, shown.1))
 }
 
+/// The version of the focus marks, in the names they're kept under, as `CLIPPING_VERSION`.
+const FOCUS_VERSION: u32 = 1;
+
+fn focus_name(path: &Path, shown: (u32, u32), level: crate::focus::Level, colour: [u8; 3]) -> Result<String, Problem> {
+    let [r, g, b] = colour;
+    Ok(format!("{}-focus-v{FOCUS_VERSION}-{}-{r:02x}{g:02x}{b:02x}-{}x{}.png", cache_key(path)?, level.name(), shown.0, shown.1))
+}
+
 /// The name a photo's full size is kept under. Ending in `-full.jpg`, as `trim_full` looks for, so
 /// that those of an older `FULL_VERSION` are the oldest, and go first.
 fn full_name(path: &Path) -> Result<String, Problem> {
@@ -551,6 +587,31 @@ mod tests {
         assert_eq!(cache.clipping(&reader, &photo, (32, 24)).unwrap(), png);
         assert_eq!(cache.cached_clipping(&photo, (32, 24)).unwrap(), png);
         assert_eq!(reader.0.load(Ordering::SeqCst), 1, "read once");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_image_file_s_focus_marks_are_kept_for_each_level_and_colour_and_not_made_again() {
+        let dir = std::env::temp_dir().join(format!("photomatch-thumbs-focus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("a.jpg");
+        std::fs::write(&photo, b"a photo").unwrap();
+        let cache = ThumbCache::new(dir.join("thumbnails")).unwrap();
+        let reader = Developed(AtomicUsize::new(0));
+        let (mid, green) = (crate::focus::Level::Mid, [0, 255, 0]);
+        assert!(cache.cached_focus(&photo, (32, 24), mid, green).is_none());
+
+        let png = cache.focus(&reader, &photo, (32, 24), mid, green).unwrap();
+        let marks = image::load_from_memory_with_format(&png, ImageFormat::Png).unwrap();
+        assert_eq!((marks.width(), marks.height()), (32, 24));
+        // The made-up photo is black all over: nothing sharp, nothing marked.
+        assert!(marks.to_rgba8().pixels().all(|p| p.0[3] == 0));
+        assert_eq!(cache.focus(&reader, &photo, (32, 24), mid, green).unwrap(), png);
+        assert_eq!(cache.cached_focus(&photo, (32, 24), mid, green).unwrap(), png);
+        assert_eq!(reader.0.load(Ordering::SeqCst), 1, "read once");
+        assert!(cache.cached_focus(&photo, (32, 24), crate::focus::Level::High, green).is_none(), "another level, other marks");
+        assert!(cache.cached_focus(&photo, (32, 24), mid, [255, 255, 0]).is_none(), "another colour too");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
