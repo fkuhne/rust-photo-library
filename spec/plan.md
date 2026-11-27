@@ -4,7 +4,7 @@ The work, as small steps in order. Each step names the decision records it depen
 
 **How we work through it**
 - One step at a time. Before a step with design choices, the agent lays out the options, the evidence and a recommendation; the owner picks.
-- Every dependency states its licence, and whether it allows MIT or Apache 2.0 publishing and closed use ([0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
+- Every dependency states its licence, and whether it allows MIT or Apache 2.0 publishing and closed use ([0003](decisions/0003-private-now-written-so-it-can-be-opened.md), kept by [0024](decisions/0024-open-now-under-mit-or-apache-2-0.md)).
 - A new decision gets its record first, in its own commit. A Proposed record becomes Accepted in the commit that implements it.
 - Guesses go into the matching record's "Assumptions to verify", ticked with evidence once checked.
 - Tick the step here in the commit that finishes it.
@@ -87,4 +87,5 @@ The work, as small steps in order. Each step names the decision records it depen
 - [x] 2.18 What tells a burst, for PhotoMatch's plan step 2.76: the time's milliseconds, from EXIF's SubSecTimeOriginal as LibRaw reads it, through a callback of the library's own; the drive mode, by maker; the body's serial number ([0023](decisions/0023-the-time-s-milliseconds-the-drive-mode-and-the-camera-s-serial-number-for-finding-bursts.md)).
 
   Built on 2026-11-27: `drive.rs`; `glue/shot_details.cpp` in `rsraw-sys`, set by `rsraw::RawImage` before each file opens; `PhotoInfo`'s `captured_ms`, `drive` and `serial`, its details at version 2. 97 tests pass, 101 with `places`, 2 new. Over PhotoMatch's samples, `examples/shot_details.rs`: milliseconds from 7 of the 10 Sony bodies, every Canon, Nikon and Panasonic, the X100VI, the K-3 Mark III and the phones, 0 to 2 ms a file; continuous on the A6400, the A7S III and the K-3 Mark III.
+- [ ] 2.19 Open, from PhotoMatch's owner on 2026-11-27: the licence, MIT OR Apache-2.0, in `Cargo.toml` and two licence files; a README for readers, crediting LibRaw, `rsraw`, the Focus Points maps, GeoNames and ExifTool's documentation; the history as it is; then the repository public on GitHub, at the owner's word after reading the README ([0024](decisions/0024-open-now-under-mit-or-apache-2-0.md), superseding 0003).
 - [ ] 2.2 PhotoDev on the library: its `library` module, `folder.rs` and `vendor` removed, its `edited` flag set after the library's listing, in PhotoDev's repository, with a record there that supersedes its 0008 for this code. Its tests, self-checks and originals test pass. Flips [0003](decisions/0003-private-now-written-so-it-can-be-opened.md) to Accepted, once every licence is listed.

@@ -1,6 +1,6 @@
 # 0003. Private now, written so it can be opened
 
-- Status: Proposed
+- Status: Superseded by [0024](0024-open-now-under-mit-or-apache-2-0.md)
 - Date: 2026-11-20
 
 ## Context
@@ -46,3 +46,7 @@ What the library holds, by licence:
 
 - The owner, in PhotoDev's conversation of 2026-11-20.
 - `../photomatch/spec/decisions/0013-build-libraw-0-22-3-from-a-pinned-copy.md`, and `../photomatch/docs/licences.md`.
+
+## Why it was superseded
+
+On 2026-11-27 PhotoMatch's owner chose to open the repository now, "as a way to share what I am doing", licensed MIT OR Apache-2.0: record [0024](0024-open-now-under-mit-or-apache-2-0.md). Its rules for what comes in, every dependency allowing MIT or Apache 2.0 publishing and nothing from GPL or AGPL code, stay.

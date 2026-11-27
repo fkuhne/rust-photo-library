@@ -53,7 +53,7 @@ It starts from PhotoMatch's code, as it is, so that PhotoMatch's behaviour doesn
 - **PhotoDev's tests and self-checks pass on it,** its originals test included.
 - **A fix lands once:** one change in the library reaches both apps, with a commit pin moved in each.
 - **Both apps write a shared sidecar by the same code,** and a photo rated in either shows the same in the other.
-- **Ready to open:** every line, and every dependency's licence, allows publishing it under MIT or Apache 2.0 ([0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
+- **Open:** public on GitHub, MIT OR Apache-2.0, every line and every dependency's licence allowing it, each credited ([0024](decisions/0024-open-now-under-mit-or-apache-2-0.md), superseding [0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
 
 ## Scope
 
@@ -69,7 +69,7 @@ It starts from PhotoMatch's code, as it is, so that PhotoMatch's behaviour doesn
 - **CI,** building and testing the library on macOS and Windows, once there are minutes for it.
 
 **Later, as ideas:**
-- **Open source:** published on GitHub and crates.io, with its documentation and examples, for others to reuse. From the owner on 2026-11-20. *Default proposed the same day:* private now, decided later ([0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
+- **On crates.io,** with its documentation and examples, for others to reuse: from the owner on 2026-11-20. Public on GitHub since 2026-11-27 ([0024](decisions/0024-open-now-under-mit-or-apache-2-0.md)).
 - **More shared pieces,** when two apps need them: PhotoDev's colour maths and ICC profiles, or its edit settings, if PhotoMatch or PhotoBook comes to need them.
 
 ## Non-goals
@@ -96,6 +96,6 @@ It starts from PhotoMatch's code, as it is, so that PhotoMatch's behaviour doesn
 
 For the owner, in step 0.2:
 1. **The crate's name on crates.io,** if it's opened: `photo-library` must be free there (unchecked). The repository's name, `rust-photo-library`, is the owner's, from 2026-11-20.
-2. **When to open it:** private now, decided later, is the default ([0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
+2. **When to open it:** answered on 2026-11-27, now, MIT OR Apache-2.0 ([0024](decisions/0024-open-now-under-mit-or-apache-2-0.md), superseding [0003](decisions/0003-private-now-written-so-it-can-be-opened.md)).
 3. **PhotoBook:** next, after PhotoMatch and PhotoDev, is the default.
-4. **CI credentials:** an app's CI fetching a private library needs a deploy key or a token (unchecked how). Only when CI runs again.
+4. **CI credentials:** a read-only deploy key from 2026-11-22; once the repository is public, none, the apps reaching it over HTTPS ([0024](decisions/0024-open-now-under-mit-or-apache-2-0.md)).

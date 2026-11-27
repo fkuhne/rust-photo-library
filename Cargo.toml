@@ -8,7 +8,8 @@ version = "0.1.0"
 edition = "2024"
 description = "Reading RAW and image files, thumbnails and ratings in XMP sidecars, shared by the owner's photo apps."
 repository = "https://github.com/fkuhne/rust-photo-library"
-# Private for now (record 0003): never published by mistake.
+# Public on GitHub, MIT OR Apache-2.0 (record 0024); not on crates.io yet, never published by mistake.
+license = "MIT OR Apache-2.0"
 publish = false
 
 # The versions PhotoMatch builds with, as default requirements: a library's Cargo.lock doesn't

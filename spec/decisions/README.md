@@ -23,7 +23,7 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 |---|---|---|---|
 | [0001](0001-work-from-a-spec-and-record-every-decision.md) | Work from a spec and record every decision | Accepted | 2026-11-20 |
 | [0002](0002-one-rust-crate-in-its-own-repository-pinned-by-each-app.md) | One Rust crate in its own repository, pinned by each app | Accepted | 2026-11-20 |
-| [0003](0003-private-now-written-so-it-can-be-opened.md) | Private now, written so it can be opened | Proposed | 2026-11-20 |
+| [0003](0003-private-now-written-so-it-can-be-opened.md) | Private now, written so it can be opened | Superseded by 0024 | 2026-11-20 |
 | [0004](0004-photomatch-s-code-as-it-is-is-the-starting-point.md) | PhotoMatch's code, as it is, is the starting point | Accepted | 2026-11-20 |
 | [0005](0005-a-workspace-of-three-packages-libraw-always-built-photomatch-s-modules.md) | A workspace of three packages, LibRaw always built, and PhotoMatch's modules as the API | Accepted | 2026-11-21 |
 | [0006](0006-dependencies-as-default-requirements-the-lockfile-for-the-library-s-own-builds.md) | Dependencies as default requirements, at the apps' versions; the lockfile for the library's own builds | Accepted | 2026-11-21 |
@@ -44,3 +44,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0021](0021-the-camera-s-focus-point-from-its-maker-notes-and-whether-the-photo-is-in-focus-there.md) | The camera's focus point, from its maker notes, and whether the photo is in focus there | Accepted | 2026-11-26 |
 | [0022](0022-canon-s-and-nikon-s-focus-points-from-their-af-blocks-nikon-s-named-points-by-the-focus-points-plugin-s-maps.md) | Canon's and Nikon's focus points, from their AF blocks; Nikon's named points by the Focus Points plugin's maps | Accepted | 2026-11-26 |
 | [0023](0023-the-time-s-milliseconds-the-drive-mode-and-the-camera-s-serial-number-for-finding-bursts.md) | The time's milliseconds, the drive mode and the camera's serial number, for finding bursts | Accepted | 2026-11-27 |
+| [0024](0024-open-now-under-mit-or-apache-2-0.md) | Open now, under MIT OR Apache-2.0 | Accepted | 2026-11-27 |
