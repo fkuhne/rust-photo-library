@@ -16,6 +16,9 @@ mod af;
 mod af_numbers;
 /// Where a photo's highlights clip and its shadows sink, from a RAW file's sensor data (record 0014).
 pub mod clipping;
+/// How the shutter was released, one frame or continuously, and the time's milliseconds, for an
+/// app to find bursts (record 0023).
+pub mod drive;
 /// Writing a file atomically and durably, through a temporary file.
 /// Where a photo is sharp, as focus peaking marks it (record 0018).
 pub mod focus;

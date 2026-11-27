@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
 
+use crate::drive::Drive;
 use crate::image_file::{self, ImageFileReader};
 use crate::problem::Problem;
 use crate::raw::{self, LibRawReader};
@@ -88,8 +89,9 @@ impl Position {
 }
 
 /// What `PhotoInfo` holds, by version: details cached at an older one are read again, the
-/// thumbnail kept (record 0010). 1: the position.
-pub const DETAILS_VERSION: u32 = 1;
+/// thumbnail kept (record 0010). 1: the position; 2: the time's milliseconds, the drive mode and
+/// the camera's serial number (record 0023).
+pub const DETAILS_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +101,18 @@ pub struct PhotoInfo {
     pub lens: String,
     /// As set on the camera's clock, `YYYY-MM-DD HH:MM:SS`.
     pub captured_at: Option<String>,
+    /// The milliseconds `captured_at` leaves out, where the file records them, from EXIF's
+    /// SubSecTimeOriginal (record 0023).
+    #[serde(default)]
+    pub captured_ms: Option<u16>,
+    /// Whether the shutter was released one frame at a time or continuously, where the file says
+    /// so in a way the library reads (record 0023).
+    #[serde(default)]
+    pub drive: Option<Drive>,
+    /// The camera body's serial number, to tell two bodies of one model apart; empty where none is
+    /// recorded (record 0023).
+    #[serde(default)]
+    pub serial: String,
     pub iso: u32,
     pub shutter_seconds: f32,
     pub aperture: f32,

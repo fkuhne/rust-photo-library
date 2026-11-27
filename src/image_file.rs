@@ -107,6 +107,11 @@ fn details(exif: Option<&Exif>) -> PhotoInfo {
         make,
         lens: exif.and_then(|e| text(e, Tag::LensModel)).unwrap_or_default(),
         captured_at: exif.and_then(|e| text(e, Tag::DateTimeOriginal).or_else(|| text(e, Tag::DateTime))).and_then(|t| date(&t)),
+        // The fraction of a second of whichever time was taken (record 0023).
+        captured_ms: exif
+            .and_then(|e| if text(e, Tag::DateTimeOriginal).is_some() { text(e, Tag::SubSecTimeOriginal) } else { text(e, Tag::DateTime).and_then(|_| text(e, Tag::SubSecTime)) })
+            .and_then(|s| crate::drive::milliseconds(&s)),
+        serial: exif.and_then(|e| text(e, Tag::BodySerialNumber)).unwrap_or_default(),
         iso: exif.and_then(|e| uint(e, Tag::PhotographicSensitivity)).unwrap_or(0),
         shutter_seconds: exif.and_then(|e| rational(e, Tag::ExposureTime)).unwrap_or(0.0),
         aperture: exif.and_then(|e| rational(e, Tag::FNumber)).unwrap_or(0.0),

@@ -105,6 +105,11 @@ fn build(out_dir: impl AsRef<Path>) {
     libraw.file("LibRaw/src/libraw_c_api.cpp");
     // libraw.file("LibRaw/src/libraw_cxx.cpp");
     libraw.file("LibRaw/src/libraw_datastream.cpp");
+    // photo-library's own: what LibRaw reads but doesn't keep, as the sub-second time (its
+    // record 0023).
+    libraw.file("glue/shot_details.cpp");
+    // bindgen's callbacks name only the headers to watch, so the glue is named too.
+    println!("cargo:rerun-if-changed=glue/shot_details.cpp");
 
     libraw.warnings(false);
     libraw.extra_warnings(false);

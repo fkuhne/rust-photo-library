@@ -43,3 +43,4 @@ Don't rewrite a record to change its decision. Write a new record and mark the o
 | [0020](0020-focus-marks-judged-around-each-spot-not-in-fixed-blocks.md) | Focus marks judged around each spot, not in fixed blocks | Accepted | 2026-11-26 |
 | [0021](0021-the-camera-s-focus-point-from-its-maker-notes-and-whether-the-photo-is-in-focus-there.md) | The camera's focus point, from its maker notes, and whether the photo is in focus there | Accepted | 2026-11-26 |
 | [0022](0022-canon-s-and-nikon-s-focus-points-from-their-af-blocks-nikon-s-named-points-by-the-focus-points-plugin-s-maps.md) | Canon's and Nikon's focus points, from their AF blocks; Nikon's named points by the Focus Points plugin's maps | Accepted | 2026-11-26 |
+| [0023](0023-the-time-s-milliseconds-the-drive-mode-and-the-camera-s-serial-number-for-finding-bursts.md) | The time's milliseconds, the drive mode and the camera's serial number, for finding bursts | Accepted | 2026-11-27 |

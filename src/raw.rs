@@ -4,6 +4,7 @@ use std::path::Path;
 
 use image::ImageFormat;
 
+use crate::drive;
 use crate::photo::{has_extension, Orientation, Photo, PhotoInfo, PhotoReader, Position, Preview, Want, DETAILS_VERSION};
 use crate::problem::Problem;
 use crate::thumbs;
@@ -50,6 +51,36 @@ pub fn read_developed(path: &Path, full: bool) -> Result<Photo, Problem> {
 /// (record 0016), on Windows through its wide-character call (record 0031).
 pub(crate) fn open(path: &Path) -> Result<rsraw::RawImage, Problem> {
     rsraw::RawImage::open_file(path).map_err(|e| opening_problem(path, e))
+}
+
+/// What tells a burst (record 0023): the time's milliseconds, as LibRaw reads EXIF's
+/// SubSecTimeOriginal for the library's callback; the drive mode, from the maker notes' fields
+/// LibRaw keeps, by maker; and the body's serial number, else the one LibRaw reads inside it.
+/// Olympus's and OM System's DriveMode, whose values ExifTool works out in its code rather than
+/// lists, isn't read, nor Panasonic's BurstMode, whose maker note LibRaw doesn't pass to its
+/// callback; their files' milliseconds tell their bursts.
+fn shot_details(raw: &rsraw::RawImage, info: &mut PhotoInfo) {
+    let data: &rsraw_sys::libraw_data_t = raw.as_ref();
+    let text = |chars: &[std::os::raw::c_char]| -> String { chars.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect::<String>().trim().to_string() };
+    info.captured_ms = info.captured_at.as_ref().and(raw.subsec_time_original()).and_then(|s| drive::milliseconds(&s));
+    let notes = &data.makernotes;
+    let make = text(&data.idata.make).to_ascii_lowercase();
+    info.drive = if make.starts_with("sony") {
+        // 0 where the 0x9400 block wasn't found or deciphered.
+        (notes.sony.Sony0x9400_version != 0).then(|| drive::sony(notes.sony.Sony0x9400_ReleaseMode2)).flatten()
+    } else if make.starts_with("canon") {
+        drive::canon(notes.canon.ContinuousDrive)
+    } else if make.starts_with("nikon") {
+        drive::nikon(notes.nikon.ShootingMode)
+    } else if make.starts_with("fuji") {
+        drive::fujifilm(notes.fuji.DriveMode)
+    } else if make.starts_with("pentax") || make.starts_with("ricoh") {
+        drive::pentax(notes.pentax.DriveMode[0])
+    } else {
+        None
+    };
+    let serial = text(&data.shootinginfo.BodySerial);
+    info.serial = if serial.is_empty() { text(&data.shootinginfo.InternalBodySerial) } else { serial };
 }
 
 /// The orientation LibRaw's `flip` gives, the photo upright once turned so.
@@ -162,7 +193,9 @@ fn read(path: &Path, want: Want, always_develop: bool) -> Result<Photo, Problem>
         no_preview: None,
         position: position(&data.other.parsed_gps),
         details_version: DETAILS_VERSION,
+        ..PhotoInfo::default()
     };
+    shot_details(&raw, &mut info);
 
     // No JPEG preview to show, as with the Canon R5 Mark II's HEIF ones (finding 6 in
     // docs/photo-browser.md): the photo is developed from its RAW data instead, if LibRaw

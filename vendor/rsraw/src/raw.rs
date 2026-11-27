@@ -16,6 +16,10 @@ pub const BIT_DEPTH_16: BitDepth = 16;
 
 pub struct RawImage {
     raw_data: *mut sys::libraw_data_t,
+    /// What LibRaw reads but doesn't keep, filled as it reads the file; boxed, so that it stays
+    /// where LibRaw points while the image moves. Dropped after LibRaw's handle is closed. (Added
+    /// for PhotoMatch, photo-library's record 0023.)
+    details: Box<sys::rsraw_shot_details>,
 }
 
 unsafe impl Sync for RawImage {}
@@ -23,10 +27,25 @@ unsafe impl Sync for RawImage {}
 unsafe impl Send for RawImage {}
 
 impl RawImage {
+    /// LibRaw's handle, its callbacks set to keep what it reads but doesn't keep.
+    fn init() -> Self {
+        let mut image = Self { raw_data: unsafe { sys::libraw_init(0) }, details: Box::default() };
+        unsafe { sys::rsraw_watch_shot_details(image.raw_data, &mut *image.details) };
+        image
+    }
+
+    /// EXIF's SubSecTimeOriginal, the fraction of a second the time taken leaves out, as written:
+    /// its digits, as "83" for 0.83 s. `None` where the file has none. (Added for PhotoMatch.)
+    pub fn subsec_time_original(&self) -> Option<String> {
+        let text: String = self.details.subsec_original.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
+        let text = text.trim();
+        (!text.is_empty()).then(|| text.to_string())
+    }
+
     /// LibRaw keeps a pointer into `buf` until the image is dropped: the caller keeps `buf`
     /// alive that long. (PhotoMatch: LibRaw's handle is closed if opening fails.)
     pub fn open(buf: &[u8]) -> Result<Self> {
-        let image = Self { raw_data: unsafe { sys::libraw_init(0) } };
+        let image = Self::init();
         Error::check(unsafe {
             sys::libraw_open_buffer(image.raw_data, buf.as_ptr() as *const _, buf.len())
         })?;
@@ -40,7 +59,7 @@ impl RawImage {
     pub fn open_file(path: &std::path::Path) -> Result<Self> {
         use std::os::unix::ffi::OsStrExt;
         let path = std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|_| Error::Io)?;
-        let image = Self { raw_data: unsafe { sys::libraw_init(0) } };
+        let image = Self::init();
         Error::check(unsafe { sys::libraw_open_file(image.raw_data, path.as_ptr()) })?;
         Ok(image)
     }
@@ -57,7 +76,7 @@ impl RawImage {
             return Err(Error::Io);
         }
         wide.push(0);
-        let image = Self { raw_data: unsafe { sys::libraw_init(0) } };
+        let image = Self::init();
         Error::check(unsafe { sys::libraw_open_wfile(image.raw_data, wide.as_ptr()) })?;
         Ok(image)
     }

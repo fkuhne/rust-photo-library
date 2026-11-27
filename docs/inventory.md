@@ -84,6 +84,7 @@ Both are copies of `rsraw` 0.1.1 and `rsraw-sys` 0.1.1 (MIT, `hexilee/rsraw`), w
   Its plan steps 1.2 to 2.1.
 - **PhotoDev's copy holds PhotoMatch's additions too,** as it was copied from PhotoMatch's, but from its commit `c12880a`, older than the rest of PhotoDev's copy: it lacks PhotoMatch's `open_file` on Windows (its record 0031). So the merged `rsraw` is PhotoMatch's, at its commit `391fd74`, with PhotoDev's block of eleven functions taken in from its commit `d95ff89`, each addition marked by whose it was (step 1.2). Otherwise the two differed only by comments.
 - **`rsraw-sys`:** the two build scripts and manifests differ by 6 lines, PhotoDev's header comment.
+- **The library's own, since,** each marked: `glue/shot_details.cpp` in `rsraw-sys`, a callback on LibRaw's EXIF reading that keeps SubSecTimeOriginal, built with LibRaw, and `RawImage::subsec_time_original` in `rsraw` (record [0023](../spec/decisions/0023-the-time-s-milliseconds-the-drive-mode-and-the-camera-s-serial-number-for-finding-bursts.md), step 2.18, 2026-11-27).
 
 ## PhotoBook's photo module
 
