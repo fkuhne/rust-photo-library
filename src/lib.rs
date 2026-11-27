@@ -11,6 +11,9 @@
 pub use rsraw;
 pub use rsraw_sys;
 
+// Canon's and Nikon's AF blocks, for `focus::point` (the library's step 2.17, record 0022).
+mod af;
+mod af_numbers;
 /// Where a photo's highlights clip and its shadows sink, from a RAW file's sensor data (record 0014).
 pub mod clipping;
 /// Writing a file atomically and durably, through a temporary file.

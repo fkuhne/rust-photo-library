@@ -20,6 +20,7 @@ use std::path::Path;
 use image::{DynamicImage, GrayImage, ImageFormat, RgbaImage};
 use serde::{Deserialize, Serialize};
 
+use crate::af;
 use crate::clipping::{black_of, colours_of, sensor_for, Sensor};
 use crate::photo::Orientation;
 use crate::problem::Problem;
@@ -101,18 +102,46 @@ const STEEP_OF_SOFT: f64 = 0.25;
 /// Where a RAW file's camera focused, from its maker notes as LibRaw reads them: Sony's
 /// `FocusLocation`, its frame's width and height and the point's x and y; Fujifilm's `FocusPixel`,
 /// over its embedded JPEG's size, as the Exif image size gives it for a RAF file; Olympus's
-/// `AFPointSelected`, a box in shares of the frame. Turned as the photo is. `None` where none is
-/// recorded, zeros or a point outside its frame; and for every other maker, until their blocks are
-/// read (PhotoMatch's step 2.81).
+/// `AFPointSelected`, a box in shares of the frame; Canon's and Nikon's AF blocks, as `af` reads
+/// them (the library's step 2.17, record 0022), with the AF area's size where they record one.
+/// Turned as the photo is. `None` where none is recorded, zeros or a point outside its frame; and
+/// for every other maker.
 pub fn point(path: &Path) -> Result<Option<Point>, Problem> {
     let mut image = raw::open(path)?;
     let ptr: *mut rsraw_sys::libraw_data_t = image.as_mut();
     // SAFETY: LibRaw's own data, opened, read only here.
     let data: &rsraw_sys::libraw_data_t = unsafe { &*ptr };
-    let make: String = data.idata.make.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
-    let notes = &data.makernotes;
+    let text = |chars: &[std::os::raw::c_char]| -> String { chars.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect() };
+    let (make, model) = (text(&data.idata.make), text(&data.idata.model));
     // The point in shares of the frame as the sensor sees it, and that frame's width over height.
-    let sensor = if make.starts_with("Sony") {
+    let (sensor, size) = if make.starts_with("Canon") {
+        let found = af_block(data, &[0x0026, 0x003c]).and_then(|(block, little, _)| af::canon(block, little, &model));
+        (found.map(|b| (b.x, b.y, b.aspect)), found.and_then(|b| b.size))
+    } else if make.starts_with("Nikon") || make.starts_with("NIKON") {
+        let found = af_block(data, &[0x00b7]).and_then(|(block, little, version)| af::nikon(block, version, little, &model));
+        (found.map(|b| (b.x, b.y, b.aspect)), found.and_then(|b| b.size))
+    } else {
+        (point_of_others(data, &make), None)
+    };
+    Ok(sensor.map(|(x, y, aspect)| upright_point(x, y, aspect, size, data.sizes.flip)))
+}
+
+/// A maker's AF block of one of `tags`, as LibRaw keeps it: its bytes, whether little-endian, and
+/// its version, Nikon's `0101` as 101.
+fn af_block<'a>(data: &'a rsraw_sys::libraw_data_t, tags: &[u32]) -> Option<(&'a [u8], bool, u32)> {
+    let common = &data.makernotes.common;
+    let count = usize::try_from(common.afcount).unwrap_or(0).min(common.afdata.len());
+    common.afdata[..count].iter().find(|item| tags.contains(&item.AFInfoData_tag) && !item.AFInfoData.is_null() && item.AFInfoData_length > 0).map(|item| {
+        // SAFETY: LibRaw's own buffer of `AFInfoData_length` bytes, alive while `data` is.
+        let bytes = unsafe { std::slice::from_raw_parts(item.AFInfoData, item.AFInfoData_length as usize) };
+        (bytes, item.AFInfoData_order != 0x4d4d, item.AFInfoData_version)
+    })
+}
+
+/// Sony's, Fujifilm's and Olympus's points, which LibRaw reads into fields of their own.
+fn point_of_others(data: &rsraw_sys::libraw_data_t, make: &str) -> Option<(f64, f64, f64)> {
+    let notes = &data.makernotes;
+    if make.starts_with("Sony") {
         let [w, h, x, y] = notes.sony.FocusLocation.map(f64::from);
         (w > 0.0 && h > 0.0 && (x, y) != (0.0, 0.0) && x <= w && y <= h).then_some((x / w, y / h, w / h))
     } else if make.starts_with("Fujifilm") || make.starts_with("FUJIFILM") {
@@ -127,21 +156,27 @@ pub fn point(path: &Path) -> Result<Option<Point>, Problem> {
         ((x, y) != (0.0, 0.0) && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y) && h > 0.0).then_some((x, y, w / h))
     } else {
         None
-    };
-    Ok(sensor.map(|(x, y, aspect)| upright_point(x, y, aspect, data.sizes.flip)))
+    }
 }
 
 /// A point at `x`, `y` of a frame `aspect` wide over high, as the sensor sees it, as a box in the
 /// upright image, turned as LibRaw's `flip` says: 3 half round, 5 a quarter left, 6 a quarter right.
-fn upright_point(x: f64, y: f64, aspect: f64, flip: i32) -> Point {
+/// The box is the AF area's `size`, in shares of the frame, where the camera records one.
+fn upright_point(x: f64, y: f64, aspect: f64, size: Option<(f64, f64)>, flip: i32) -> Point {
+    let turned = matches!(flip, 5 | 6);
     let ((ux, uy), aspect) = match flip {
         3 => ((1.0 - x, 1.0 - y), aspect),
         5 => ((y, 1.0 - x), 1.0 / aspect),
         6 => ((1.0 - y, x), 1.0 / aspect),
         _ => ((x, y), aspect),
     };
-    // A square, its side a share of the short side.
-    let (width, height) = if aspect >= 1.0 { (POINT_SIDE / aspect, POINT_SIDE) } else { (POINT_SIDE, POINT_SIDE * aspect) };
+    let (width, height) = match size {
+        Some((w, h)) if turned => (h, w),
+        Some((w, h)) => (w, h),
+        // A square, its side a share of the short side.
+        None if aspect >= 1.0 => (POINT_SIDE / aspect, POINT_SIDE),
+        None => (POINT_SIDE, POINT_SIDE * aspect),
+    };
     Point { x: ux, y: uy, width, height }
 }
 
@@ -802,20 +837,26 @@ mod tests {
 
     #[test]
     fn a_point_turns_as_the_photo_does_and_its_box_is_square() {
-        let p = upright_point(0.25, 0.75, 1.5, 0);
+        let p = upright_point(0.25, 0.75, 1.5, None, 0);
         assert_eq!((p.x, p.y), (0.25, 0.75));
         assert!((p.width * 1.5 - p.height).abs() < 1e-9, "square on a 3:2 frame: {p:?}");
-        let left = upright_point(0.25, 0.75, 1.5, 5);
+        let left = upright_point(0.25, 0.75, 1.5, None, 5);
         assert_eq!((left.x, left.y), (0.75, 0.75), "a quarter left");
-        let right = upright_point(0.25, 0.75, 1.5, 6);
+        let right = upright_point(0.25, 0.75, 1.5, None, 6);
         assert_eq!((right.x, right.y), (0.25, 0.25), "a quarter right");
-        let half = upright_point(0.25, 0.75, 1.5, 3);
+        let half = upright_point(0.25, 0.75, 1.5, None, 3);
         assert_eq!((half.x, half.y), (0.75, 0.25));
         for flip in [0, 3, 5, 6] {
-            let turned = upright_point(0.25, 0.75, 1.5, flip);
+            let turned = upright_point(0.25, 0.75, 1.5, None, flip);
             let (x, y, _, _) = sensor_box(&turned, flip);
             assert!((x - 0.25).abs() < 1e-9 && (y - 0.75).abs() < 1e-9, "undone, flip {flip}: {x}, {y}");
         }
+        // The camera's own AF area, as Canon and Nikon record it: its size kept, turned with it.
+        let area = upright_point(0.25, 0.75, 1.5, Some((0.1, 0.2)), 0);
+        assert_eq!((area.width, area.height), (0.1, 0.2));
+        let turned = upright_point(0.25, 0.75, 1.5, Some((0.1, 0.2)), 6);
+        assert_eq!((turned.width, turned.height), (0.2, 0.1));
+        assert_eq!(sensor_box(&turned, 6), (0.25, 0.75, 0.1, 0.2));
     }
 
     #[test]

@@ -295,7 +295,9 @@ impl ThumbCache {
         }
         let found = if crate::raw::is_raw(path) {
             match crate::focus::point(path)? {
-                Some(point) => Some((point, crate::focus::judge_raw(path, shown, level, &point)?)),
+                // A file whose RAW data LibRaw can't unpack, as the Nikon Z 8's, keeps its point: it
+                // can't tell there (record 0022).
+                Some(point) => Some((point, crate::focus::judge_raw(path, shown, level, &point).unwrap_or(crate::focus::Verdict::CantTell))),
                 None => None,
             }
         } else {
@@ -521,7 +523,7 @@ fn focus_name(path: &Path, shown: (u32, u32), level: crate::focus::Level, colour
 }
 
 /// The version of the focus point's verdict, as `FOCUS_VERSION`.
-const FOCUS_POINT_VERSION: u32 = 1;
+const FOCUS_POINT_VERSION: u32 = 2;
 
 fn focus_point_name(path: &Path, shown: (u32, u32), level: crate::focus::Level) -> Result<String, Problem> {
     Ok(format!("{}-fpoint-v{FOCUS_POINT_VERSION}-{}-{}x{}.json", cache_key(path)?, level.name(), shown.0, shown.1))

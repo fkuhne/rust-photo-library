@@ -104,6 +104,7 @@ From PhotoMatch's `docs/licences.md`, read on 2026-11-20, and PhotoDev's checks 
 | `xmp_toolkit` | 1.12.1 | MIT or Apache 2.0; it builds Adobe's XMP Toolkit, BSD 3-Clause, with expat and zlib (PhotoMatch's `docs/licences.md`) | Yes (unchecked for the toolkit's own terms beyond its notices) |
 | `serde`, `serde_json` | 1.0.229, 1.0.154 | MIT or Apache 2.0 | Yes |
 | `windows`, on Windows | 0.62.2 | MIT or Apache 2.0 (unchecked here) | Yes |
+| The Focus Points plugin's maps of Nikon's AF points, built in by `af.rs` (record [0022](../spec/decisions/0022-canon-s-and-nikon-s-focus-points-from-their-af-blocks-nikon-s-named-points-by-the-focus-points-plugin-s-maps.md)), added on 2026-11-26 | `9e00882` | Apache 2.0, its licence in `src/af_maps/LICENSE` | Yes: the licence kept beside them, and in PhotoMatch's third-party notices |
 
 None is GPL or AGPL.
 
