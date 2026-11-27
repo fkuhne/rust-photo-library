@@ -45,7 +45,7 @@ What was read and checked on 2026-11-27:
 
 ## Assumptions to verify
 
-- [ ] The repository public on GitHub, at the owner's word after the README: `gh repo view` says `PUBLIC`.
+- [x] The repository public on GitHub, at the owner's word after the README: on 2026-11-27, `gh repo view` says `PUBLIC`, its licence read by GitHub as Apache 2.0, one of the two; no fork or star before.
 - [ ] PhotoMatch builds from it over HTTPS with no key, in its own step.
 
 ## Sources
